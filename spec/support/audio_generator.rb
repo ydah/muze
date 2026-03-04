@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
-require "wavefile"
+require "wavify"
 
 module SpecAudioGenerator
   module_function
@@ -35,9 +35,15 @@ module SpecAudioGenerator
   end
 
   def write_wave(path, samples, channels:, sample_rate:)
-    format = WaveFile::Format.new(channels, :pcm_16, sample_rate)
-    WaveFile::Writer.new(path, format) do |writer|
-      writer.write(WaveFile::Buffer.new(samples, format))
-    end
+    channel_count = channels == :mono ? 1 : 2
+    interleaved_samples = channel_count == 1 ? samples : samples.flatten
+    format = Wavify::Core::Format.new(
+      channels: channel_count,
+      sample_rate: sample_rate,
+      bit_depth: 16,
+      sample_format: :pcm
+    )
+    buffer = Wavify::Core::SampleBuffer.new(interleaved_samples, format)
+    Wavify::Audio.new(buffer).write(path)
   end
 end

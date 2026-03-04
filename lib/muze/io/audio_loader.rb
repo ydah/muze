@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "wavefile"
+require "wavify"
 
 module Muze
   module IO
@@ -29,7 +29,7 @@ module Muze
 
         resampled = resample(signal, source_sr, sr)
         [Numo::SFloat.cast(resampled), sr]
-      rescue WaveFile::InvalidFormatError, StandardError => e
+      rescue Wavify::Error, StandardError => e
         raise if e.is_a?(Muze::AudioLoadError)
 
         raise Muze::AudioLoadError, "Failed to load #{path}: #{e.message}"
@@ -45,61 +45,20 @@ module Muze
       private_class_method :validate_args!
 
       def read_wave(path)
-        samples = []
-        source_sr = nil
+        audio = Wavify::Audio.read(path)
+        float_format = audio.format.with(sample_format: :float, bit_depth: 32)
+        converted = audio.convert(float_format)
 
-        WaveFile::Reader.new(path) do |reader|
-          source_sr = reader.native_format.sample_rate
-          channels = reader.native_format.channels
-          scale = pcm_scale(reader.native_format)
-
-          reader.each_buffer(2048) do |buffer|
-            buffer.samples.each do |sample|
-              samples << normalize_frame(sample, channels, scale)
-            end
-          end
-        end
-
-        [samples, source_sr]
+        [samples_from_buffer(converted.buffer), converted.format.sample_rate]
       end
       private_class_method :read_wave
 
-      def pcm_scale(format)
-        case format.sample_format
-        when :pcm_8 then 128.0
-        when :pcm_16 then 32_768.0
-        when :pcm_24 then 8_388_608.0
-        when :pcm_32 then 2_147_483_648.0
-        else
-          pcm_from_bit_depth(format)
-        end
+      def samples_from_buffer(buffer)
+        return buffer.samples if buffer.format.channels == 1
+
+        buffer.samples.each_slice(buffer.format.channels).map(&:dup)
       end
-      private_class_method :pcm_scale
-
-      def pcm_from_bit_depth(format)
-        return 1.0 unless format.audio_format == 1 && format.bits_per_sample.to_i.positive?
-
-        (2**(format.bits_per_sample - 1)).to_f
-      end
-      private_class_method :pcm_from_bit_depth
-
-      def normalize_frame(sample, channels, scale)
-        if channels == 1
-          normalize_value(sample, scale)
-        elsif sample.is_a?(Array)
-          sample.map { |value| normalize_value(value, scale) }
-        else
-          Array(sample).map { |value| normalize_value(value, scale) }
-        end
-      end
-      private_class_method :normalize_frame
-
-      def normalize_value(value, scale)
-        return value.to_f if scale == 1.0
-
-        value.to_f / scale
-      end
-      private_class_method :normalize_value
+      private_class_method :samples_from_buffer
 
       def slice_by_time(samples, sample_rate, offset:, duration:)
         start_index = (offset * sample_rate).floor

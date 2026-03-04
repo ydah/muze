@@ -33,5 +33,5 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "numo-narray", "~> 0.9"
   spec.add_dependency "numo-pocketfft", ">= 0.4", "< 1.0"
-  spec.add_dependency "wavefile", "~> 1.1"
+  spec.add_dependency "wavify", "~> 0.1"
 end
