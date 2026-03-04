@@ -4,6 +4,7 @@ require "numo/narray"
 
 require_relative "muze/version"
 require_relative "muze/errors"
+require_relative "muze/native"
 require_relative "muze/core/windows"
 require_relative "muze/core/stft"
 require_relative "muze/core/resample"
@@ -99,7 +100,7 @@ module Muze
     # @param target_sr [Integer]
     # @param res_type [Symbol]
     # @return [Numo::SFloat]
-    def resample(y, orig_sr:, target_sr:, res_type: :linear)
+    def resample(y, orig_sr:, target_sr:, res_type: :sinc)
       Muze::Core::Resample.resample(y, orig_sr:, target_sr:, res_type:)
     end
 

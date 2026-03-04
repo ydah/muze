@@ -12,11 +12,12 @@ Gem::Specification.new do |spec|
   spec.description = "Muze provides audio loading, STFT, mel features, MFCC, rhythm analysis, and effects in Ruby."
   spec.homepage = "https://github.com/ydah/muze"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.1.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
@@ -30,10 +31,11 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "numo-pocketfft", ">= 0.4", "< 1.0"
   spec.add_dependency "numo-narray", "~> 0.9"
+  spec.add_dependency "numo-pocketfft", ">= 0.4", "< 1.0"
   spec.add_dependency "wavefile", "~> 1.1"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.70"
+  spec.add_development_dependency "yard", "~> 0.9"
 end

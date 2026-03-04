@@ -1,39 +1,91 @@
 # Muze
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/muze`. To experiment with that code, run `bin/console` for an interactive prompt.
+Muze is a Ruby audio feature extraction library inspired by `librosa`.
+It provides a full pipeline from WAV loading to spectral analysis, feature extraction,
+rhythm analysis, effects, and lightweight visualization.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add this line to your application's Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem "muze"
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Then execute:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+bundle install
 ```
 
-## Usage
+Or install directly:
 
-TODO: Write usage instructions here
+```bash
+gem install muze
+```
+
+## Quick Start
+
+```ruby
+require "muze"
+
+y, sr = RAF.load("sample.wav", sr: 22_050)
+mel = RAF.melspectrogram(y:, sr:)
+mfcc = RAF.mfcc(y:, sr:, n_mfcc: 13)
+tempo, beats = RAF.beat_track(y:, sr:)
+RAF.specshow(Muze.power_to_db(mel), output: "mel.svg")
+```
+
+## Main Features
+
+- Audio I/O: `RAF.load`
+- STFT stack: `RAF.stft`, `RAF.istft`, `RAF.magphase`
+- Scale helpers: `RAF.power_to_db`, `RAF.amplitude_to_db`
+- Filters: `RAF.mel`, `RAF.chroma`
+- Features: `RAF.melspectrogram`, `RAF.mfcc`, `RAF.delta`
+- Spectral descriptors: centroid, bandwidth, rolloff, flatness, contrast, zcr, rms
+- Rhythm: `RAF.onset_strength`, `RAF.onset_detect`, `RAF.beat_track`, `RAF.tempogram`
+- Effects: `RAF.hpss`, `RAF.time_stretch`, `RAF.pitch_shift`, `RAF.trim`
+- Visualization: `RAF.specshow`, `RAF.waveshow`
+
+## librosa Mapping
+
+| librosa | Muze |
+| --- | --- |
+| `librosa.load` | `RAF.load` |
+| `librosa.stft` | `RAF.stft` |
+| `librosa.istft` | `RAF.istft` |
+| `librosa.filters.mel` | `RAF.mel` |
+| `librosa.feature.melspectrogram` | `RAF.melspectrogram` |
+| `librosa.feature.mfcc` | `RAF.mfcc` |
+| `librosa.feature.delta` | `RAF.delta` |
+| `librosa.feature.spectral_centroid` | `RAF.spectral_centroid` |
+| `librosa.feature.chroma_stft` | `RAF.chroma_stft` |
+| `librosa.onset.onset_strength` | `RAF.onset_strength` |
+| `librosa.beat.beat_track` | `RAF.beat_track` |
+| `librosa.effects.hpss` | `RAF.hpss` |
+| `librosa.display.specshow` | `RAF.specshow` |
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```bash
+bundle install
+bundle exec rspec
+bundle exec rubocop
+```
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+Optional native extension:
 
-## Contributing
+```bash
+bundle exec rake compile
+```
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/muze.
+Generate API docs:
+
+```bash
+bundle exec yard doc
+```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT

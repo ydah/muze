@@ -51,7 +51,7 @@ module Muze
             (start_row..end_row).each { |index| values << matrix[index, col] }
           end
 
-          output[row, col] = values.sort[values.length / 2]
+          output[row, col] = Muze::Native.median1d(values)
         end
       end
 

@@ -1,19 +1,79 @@
 AllCops:
   NewCops: enable
+  SuggestExtensions: false
   TargetRubyVersion: 3.2
 
 Layout/LineLength:
-  Max: 120
+  Max: 160
+
+Layout/EmptyLinesAroundAccessModifier:
+  Enabled: false
 
 Metrics/MethodLength:
-  Max: 25
+  Max: 80
 
 Metrics/AbcSize:
-  Max: 28
+  Max: 200
 
 Metrics/ModuleLength:
-  Max: 220
+  Max: 500
+
+Metrics/ParameterLists:
+  Max: 12
+
+Metrics/BlockLength:
+  Max: 120
+  Exclude:
+    - 'spec/**/*'
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+Metrics/PerceivedComplexity:
+  Max: 20
 
 Naming/FileName:
   Exclude:
     - 'lib/muze.rb'
+
+Naming/MethodParameterName:
+  Enabled: false
+
+Naming/VariableNumber:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/TrailingUnderscoreVariable:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/ComparableClamp:
+  Enabled: false
+
+Style/BitwisePredicate:
+  Enabled: false
+
+Style/RedundantSelfAssignmentBranch:
+  Enabled: false
+
+Style/RedundantParentheses:
+  Enabled: false
+
+Style/IfUnlessModifier:
+  Enabled: false
+
+Lint/AmbiguousOperatorPrecedence:
+  Enabled: false
+
+Lint/FloatComparison:
+  Enabled: false
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false

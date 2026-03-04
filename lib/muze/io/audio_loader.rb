@@ -132,13 +132,13 @@ module Muze
           samples.each { |frame| frame.each_with_index { |sample, index| channels[index] << sample } }
 
           resampled_channels = channels.map do |channel_data|
-            Muze::Core::Resample.resample(channel_data, orig_sr: source_sr, target_sr: target_sr, res_type: :linear).to_a
+            Muze::Core::Resample.resample(channel_data, orig_sr: source_sr, target_sr: target_sr, res_type: :sinc).to_a
           end
 
           target_length = resampled_channels.first.length
           Array.new(target_length) { |idx| resampled_channels.map { |channel| channel[idx] } }
         else
-          Muze::Core::Resample.resample(samples, orig_sr: source_sr, target_sr: target_sr, res_type: :linear).to_a
+          Muze::Core::Resample.resample(samples, orig_sr: source_sr, target_sr: target_sr, res_type: :sinc).to_a
         end
       end
       private_class_method :resample

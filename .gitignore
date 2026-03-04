@@ -7,7 +7,13 @@
 /pkg/
 /spec/reports/
 /tmp/
+/.tmp/
 .rspec_status
 Gemfile.lock
 *.gem
 *.bundle
+/ext/muze/Makefile
+/ext/muze/*.o
+/ext/muze/*.bundle
+/ext/muze/mkmf.log
+/ext/muze/*.dSYM/

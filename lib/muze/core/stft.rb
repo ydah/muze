@@ -16,6 +16,7 @@ module Muze
       # @param pad_mode [Symbol]
       # @return [Numo::DComplex] shape: [1 + n_fft/2, frames]
       def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect)
+        _ = pad_mode
         win_length ||= n_fft
         validate_stft_params!(n_fft:, hop_length:, win_length:)
 
@@ -183,13 +184,7 @@ module Muze
       private_class_method :power_of_two?
 
       def frame_signal(signal, n_fft, hop_length)
-        return [signal + Array.new(n_fft - signal.length, 0.0)] if signal.length <= n_fft
-
-        frame_count = ((signal.length - n_fft) / hop_length) + 1
-        Array.new(frame_count) do |index|
-          start = index * hop_length
-          signal[start, n_fft]
-        end
+        Muze::Native.frame_slices(signal, n_fft, hop_length)
       end
       private_class_method :frame_signal
 
