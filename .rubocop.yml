@@ -1,0 +1,19 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+
+Layout/LineLength:
+  Max: 120
+
+Metrics/MethodLength:
+  Max: 25
+
+Metrics/AbcSize:
+  Max: 28
+
+Metrics/ModuleLength:
+  Max: 220
+
+Naming/FileName:
+  Exclude:
+    - 'lib/muze.rb'
