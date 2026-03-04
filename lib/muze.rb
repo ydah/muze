@@ -7,7 +7,11 @@ require_relative "muze/errors"
 require_relative "muze/core/windows"
 require_relative "muze/core/stft"
 require_relative "muze/core/resample"
+require_relative "muze/core/dct"
 require_relative "muze/io/audio_loader"
+require_relative "muze/filters/mel"
+require_relative "muze/feature/mfcc"
+require_relative "muze/feature/spectral"
 
 # Main entrypoint for Muze API.
 module Muze
@@ -90,6 +94,93 @@ module Muze
     # @return [Numo::SFloat]
     def resample(y, orig_sr:, target_sr:, res_type: :linear)
       Muze::Core::Resample.resample(y, orig_sr:, target_sr:, res_type:)
+    end
+
+    # @param sr [Integer]
+    # @param n_fft [Integer]
+    # @param n_mels [Integer]
+    # @param fmin [Float]
+    # @param fmax [Float, nil]
+    # @param htk [Boolean]
+    # @return [Numo::SFloat]
+    def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false)
+      Muze::Filters.mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:)
+    end
+
+    # @param y [Numo::SFloat, Array<Float>, nil]
+    # @param sr [Integer]
+    # @param s [Numo::SFloat, nil]
+    # @param n_fft [Integer]
+    # @param hop_length [Integer]
+    # @param n_mels [Integer]
+    # @param fmin [Float]
+    # @param fmax [Float, nil]
+    # @return [Numo::SFloat]
+    def melspectrogram(y: nil, sr: 22_050, s: nil, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil)
+      Muze::Feature.melspectrogram(y:, sr:, s:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
+    end
+
+    # @param y [Numo::SFloat, Array<Float>, nil]
+    # @param sr [Integer]
+    # @param s [Numo::SFloat, nil]
+    # @param n_mfcc [Integer]
+    # @param n_fft [Integer]
+    # @param hop_length [Integer]
+    # @param n_mels [Integer]
+    # @param fmin [Float]
+    # @param fmax [Float, nil]
+    # @return [Numo::SFloat]
+    def mfcc(y: nil, sr: 22_050, s: nil, n_mfcc: 20, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil)
+      Muze::Feature.mfcc(y:, sr:, s:, n_mfcc:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
+    end
+
+    # @param data [Numo::SFloat]
+    # @param order [Integer]
+    # @param width [Integer]
+    # @param mode [Symbol]
+    # @return [Numo::SFloat]
+    def delta(data, order: 1, width: 9, mode: :interp)
+      Muze::Feature.delta(data, order:, width:, mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_centroid(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512)
+      Muze::Feature.spectral_centroid(y:, s:, sr:, n_fft:, hop_length:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_bandwidth(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, p: 2)
+      Muze::Feature.spectral_bandwidth(y:, s:, sr:, n_fft:, hop_length:, p:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_rolloff(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, roll_percent: 0.85)
+      Muze::Feature.spectral_rolloff(y:, s:, sr:, n_fft:, hop_length:, roll_percent:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_flatness(y: nil, s: nil, n_fft: 2048, hop_length: 512, amin: 1.0e-10)
+      Muze::Feature.spectral_flatness(y:, s:, n_fft:, hop_length:, amin:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_contrast(y: nil, s: nil, n_fft: 2048, hop_length: 512, n_bands: 6, quantile: 0.02)
+      Muze::Feature.spectral_contrast(y:, s:, n_fft:, hop_length:, n_bands:, quantile:)
+    end
+
+    # @return [Numo::SFloat]
+    def zero_crossing_rate(y, frame_length: 2048, hop_length: 512)
+      Muze::Feature.zero_crossing_rate(y, frame_length:, hop_length:)
+    end
+
+    # @return [Numo::SFloat]
+    def rms(y: nil, s: nil, frame_length: 2048, hop_length: 512)
+      Muze::Feature.rms(y:, s:, frame_length:, hop_length:)
+    end
+
+    # @return [Numo::SFloat]
+    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384)
+      Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:)
     end
   end
 end
