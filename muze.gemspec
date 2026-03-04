@@ -34,7 +34,4 @@ Gem::Specification.new do |spec|
   spec.add_dependency "numo-narray", "~> 0.9"
   spec.add_dependency "numo-pocketfft", ">= 0.4", "< 1.0"
   spec.add_dependency "wavefile", "~> 1.1"
-
-  spec.add_development_dependency "rspec", "~> 3.13"
-  spec.add_development_dependency "yard", "~> 0.9"
 end

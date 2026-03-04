@@ -7,3 +7,8 @@ gemspec
 
 gem "irb"
 gem "rake", "~> 13.0"
+
+group :development do
+  gem "rspec", "~> 3.13"
+  gem "yard", "~> 0.9"
+end
