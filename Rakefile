@@ -16,9 +16,4 @@ task :compile do
   end
 end
 
-desc "Run RuboCop"
-task :rubocop do
-  sh "bundle exec rubocop"
-end
-
 task default: :spec

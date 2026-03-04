@@ -36,6 +36,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "wavefile", "~> 1.1"
 
   spec.add_development_dependency "rspec", "~> 3.13"
-  spec.add_development_dependency "rubocop", "~> 1.70"
   spec.add_development_dependency "yard", "~> 0.9"
 end

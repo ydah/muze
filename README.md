@@ -71,7 +71,6 @@ RAF.specshow(Muze.power_to_db(mel), output: "mel.svg")
 ```bash
 bundle install
 bundle exec rspec
-bundle exec rubocop
 ```
 
 Optional native extension:

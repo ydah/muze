@@ -16,4 +16,4 @@ All notable changes to this project are documented in this file.
 - Effects (`hpss`, `time_stretch`, `pitch_shift`, `trim`).
 - SVG-based visualization (`specshow`, `waveshow`).
 - Sinc-based resampler and optional C extension scaffold.
-- CI workflow for Ruby 3.1/3.2/3.3 with RSpec and RuboCop.
+- CI workflow for Ruby 3.1/3.2/3.3 with RSpec.
