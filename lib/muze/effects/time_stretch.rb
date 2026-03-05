@@ -38,7 +38,8 @@ module Muze
 
       rate = 2.0**(-n_steps.to_f / 12.0)
       stretched = time_stretch(signal, rate:)
-      restored = Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: signal.size, res_type: :linear)
+      preferred_res_type = signal.size >= MIN_PHASE_VOCODER_SAMPLES ? :sinc : :linear
+      restored = resample_for_pitch_shift(stretched, target_size: signal.size, preferred_res_type:)
       Numo::SFloat.cast(restored[0...signal.size])
     end
 
@@ -150,5 +151,21 @@ module Muze
       Numo::SFloat.cast(stretched)
     end
     private_class_method :linear_time_stretch
+
+    # Prefer sinc-quality resampling, then fall back to linear on failure.
+    # @param stretched [Numo::SFloat]
+    # @param target_size [Integer]
+    # @param preferred_res_type [Symbol]
+    # @return [Numo::SFloat]
+    def resample_for_pitch_shift(stretched, target_size:, preferred_res_type:)
+      if preferred_res_type == :sinc
+        return Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :sinc)
+      end
+
+      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :linear)
+    rescue Muze::Error, StandardError
+      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :linear)
+    end
+    private_class_method :resample_for_pitch_shift
   end
 end

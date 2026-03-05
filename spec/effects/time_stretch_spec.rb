@@ -47,6 +47,20 @@ RSpec.describe Muze::Effects do
 
       expect(shifted.size).to eq(signal.size)
     end
+
+    it "shifts 440Hz close to 880Hz for +12 semitones" do
+      shifted = described_class.pitch_shift(long_signal, sr:, n_steps: 12.0)
+      peak = dominant_frequency(shifted, sr:)
+
+      expect(peak).to be_within(20.0).of(880.0)
+    end
+
+    it "supports fractional n_steps" do
+      shifted = described_class.pitch_shift(signal, sr:, n_steps: 0.5)
+
+      expect(shifted.size).to eq(signal.size)
+      expect(shifted.to_a.all?(&:finite?)).to be(true)
+    end
   end
 
   describe ".trim" do
