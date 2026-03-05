@@ -71,6 +71,9 @@ against `benchmarks/baseline.json`. To refresh the baseline:
 MUZE_BENCH_UPDATE_BASELINE=1 bundle exec rake bench
 ```
 
+Quality regression thresholds for effects are documented in
+`benchmarks/quality_thresholds.md`.
+
 Optional native extension:
 
 ```bash

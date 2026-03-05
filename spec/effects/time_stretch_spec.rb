@@ -33,8 +33,8 @@ RSpec.describe Muze::Effects do
       stretched = described_class.time_stretch(long_signal, rate: 2.0)
       baseline = naive_linear_time_stretch(long_signal, rate: 2.0)
 
-      phase_vocoder_peak = dominant_frequency(stretched, sr:)
-      baseline_peak = dominant_frequency(baseline, sr:)
+      phase_vocoder_peak = SpecEffectQualityMetrics.dominant_frequency(stretched, sr:)
+      baseline_peak = SpecEffectQualityMetrics.dominant_frequency(baseline, sr:)
 
       expect((phase_vocoder_peak - 440.0).abs).to be < (baseline_peak - 440.0).abs
       expect(phase_vocoder_peak).to be_within(12.0).of(440.0)
@@ -50,7 +50,7 @@ RSpec.describe Muze::Effects do
 
     it "shifts 440Hz close to 880Hz for +12 semitones" do
       shifted = described_class.pitch_shift(long_signal, sr:, n_steps: 12.0)
-      peak = dominant_frequency(shifted, sr:)
+      peak = SpecEffectQualityMetrics.dominant_frequency(shifted, sr:)
 
       expect(peak).to be_within(20.0).of(880.0)
     end
@@ -92,13 +92,4 @@ RSpec.describe Muze::Effects do
     Numo::SFloat.cast(stretched)
   end
 
-  def dominant_frequency(y, sr:)
-    n_fft = 2048
-    stft_matrix = Muze.stft(y, n_fft:, hop_length: 256)
-    magnitude, = Muze.magphase(stft_matrix)
-    averaged = magnitude.mean(1).to_a
-    peak_bin = averaged.each_with_index.max_by { |value, _index| value }[1]
-
-    peak_bin * sr.to_f / n_fft
-  end
 end

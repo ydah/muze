@@ -2,6 +2,7 @@
 
 require "muze"
 require_relative "support/audio_generator"
+require_relative "support/effect_quality_metrics"
 
 SpecAudioGenerator.ensure_fixtures!
 
