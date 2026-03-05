@@ -48,24 +48,6 @@ RAF.specshow(Muze.power_to_db(mel), output: "mel.svg")
 - Effects: `RAF.hpss`, `RAF.time_stretch`, `RAF.pitch_shift`, `RAF.trim`
 - Visualization: `RAF.specshow`, `RAF.waveshow`
 
-## librosa Mapping
-
-| librosa | Muze |
-| --- | --- |
-| `librosa.load` | `RAF.load` |
-| `librosa.stft` | `RAF.stft` |
-| `librosa.istft` | `RAF.istft` |
-| `librosa.filters.mel` | `RAF.mel` |
-| `librosa.feature.melspectrogram` | `RAF.melspectrogram` |
-| `librosa.feature.mfcc` | `RAF.mfcc` |
-| `librosa.feature.delta` | `RAF.delta` |
-| `librosa.feature.spectral_centroid` | `RAF.spectral_centroid` |
-| `librosa.feature.chroma_stft` | `RAF.chroma_stft` |
-| `librosa.onset.onset_strength` | `RAF.onset_strength` |
-| `librosa.beat.beat_track` | `RAF.beat_track` |
-| `librosa.effects.hpss` | `RAF.hpss` |
-| `librosa.display.specshow` | `RAF.specshow` |
-
 ## Development
 
 ```bash
