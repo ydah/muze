@@ -37,7 +37,7 @@ module Muze
     # @param onset_envelope [Numo::SFloat, Array<Float>, nil]
     # @param hop_length [Integer]
     # @param backtrack [Boolean]
-    # @param units [Symbol] :frames or :time
+    # @param units [Symbol] :frames, :samples, or :time
     # @return [Array<Integer, Float>]
     def onset_detect(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, backtrack: false, units: :frames)
       envelope = if onset_envelope
@@ -55,10 +55,12 @@ module Muze
       case units
       when :frames
         peaks
+      when :samples
+        peaks.map { |frame| frame * hop_length }
       when :time
         peaks.map { |frame| frame * hop_length.to_f / sr }
       else
-        raise Muze::ParameterError, "units must be :frames or :time"
+        raise Muze::ParameterError, "units must be :frames, :samples, or :time"
       end
     end
 

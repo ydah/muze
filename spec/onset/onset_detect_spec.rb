@@ -39,5 +39,15 @@ RSpec.describe Muze::Onset do
 
       expect(backtracked.zip(regular).all? { |a, b| a <= b }).to be(true)
     end
+
+    it "supports :samples units and aligns with :frames/:time" do
+      onset_envelope = described_class.onset_strength(y: click_signal, sr:, hop_length:, n_fft: 1024)
+      frames = described_class.onset_detect(onset_envelope:, hop_length:, units: :frames)
+      samples = described_class.onset_detect(onset_envelope:, hop_length:, units: :samples)
+      times = described_class.onset_detect(onset_envelope:, sr:, hop_length:, units: :time)
+
+      expect(samples).to eq(frames.map { |frame| frame * hop_length })
+      expect(times.zip(samples).all? { |time, sample| ((time * sr) - sample).abs <= 1.0e-6 }).to be(true)
+    end
   end
 end
