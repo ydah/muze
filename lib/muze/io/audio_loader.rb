@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
-require "wavify"
+require_relative "audio_loader/wavify_backend"
+require_relative "audio_loader/ffmpeg_backend"
 
 module Muze
   module IO
-    # WAV file loader with mono mixdown and optional resampling.
+    # Audio file loader with mono mixdown and optional resampling.
     module AudioLoader
       module_function
+
+      SUPPORTED_FORMATS = %w[wav flac mp3 ogg].freeze
 
       # @param path [String]
       # @param sr [Integer] destination sample rate
@@ -18,7 +21,8 @@ module Muze
         validate_args!(sr:, offset:, duration:)
         raise Muze::AudioLoadError, "File not found: #{path}" unless File.exist?(path)
 
-        raw_samples, source_sr = read_wave(path)
+        backend = select_backend(path)
+        raw_samples, source_sr, _channels = backend.read(path)
         sliced = slice_by_time(raw_samples, source_sr, offset:, duration:)
 
         signal = if mono
@@ -29,9 +33,11 @@ module Muze
 
         resampled = resample(signal, source_sr, sr)
         [Numo::SFloat.cast(resampled), sr]
-      rescue Wavify::Error, StandardError => e
-        raise if e.is_a?(Muze::AudioLoadError)
-
+      rescue Muze::AudioLoadError
+        raise
+      rescue Muze::UnsupportedFormatError, Muze::DependencyError => e
+        raise Muze::AudioLoadError, e.message
+      rescue StandardError => e
         raise Muze::AudioLoadError, "Failed to load #{path}: #{e.message}"
       end
 
@@ -44,21 +50,26 @@ module Muze
       end
       private_class_method :validate_args!
 
-      def read_wave(path)
-        audio = Wavify::Audio.read(path)
-        float_format = audio.format.with(sample_format: :float, bit_depth: 32)
-        converted = audio.convert(float_format)
+      def select_backend(path)
+        extension = File.extname(path).downcase
 
-        [samples_from_buffer(converted.buffer), converted.format.sample_rate]
+        if WavifyBackend.supported_extension?(extension)
+          WavifyBackend
+        elsif FFMPEGBackend.supported_extension?(extension)
+          raise Muze::DependencyError, FFMPEGBackend.installation_message(extension) unless FFMPEGBackend.available?
+
+          FFMPEGBackend
+        else
+          raise Muze::UnsupportedFormatError, unsupported_format_message(extension)
+        end
       end
-      private_class_method :read_wave
+      private_class_method :select_backend
 
-      def samples_from_buffer(buffer)
-        return buffer.samples if buffer.format.channels == 1
-
-        buffer.samples.each_slice(buffer.format.channels).map(&:dup)
+      def unsupported_format_message(extension)
+        label = extension.empty? ? "(no extension)" : extension.delete_prefix(".")
+        "Unsupported audio format: #{label}. Supported formats: #{SUPPORTED_FORMATS.join(', ')}"
       end
-      private_class_method :samples_from_buffer
+      private_class_method :unsupported_format_message
 
       def slice_by_time(samples, sample_rate, offset:, duration:)
         start_index = (offset * sample_rate).floor
