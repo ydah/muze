@@ -8,6 +8,7 @@
 /spec/reports/
 /tmp/
 /.tmp/
+/benchmarks/reports/
 .rspec_status
 Gemfile.lock
 *.gem

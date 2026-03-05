@@ -27,3 +27,6 @@ jobs:
           bundler-cache: true
       - name: Run specs
         run: bundle exec rspec
+      - name: Run benchmark regression guard
+        if: matrix.ruby == '3.3'
+        run: bundle exec rake bench

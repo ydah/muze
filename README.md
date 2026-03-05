@@ -58,6 +58,19 @@ bundle install
 bundle exec rspec
 ```
 
+Benchmark and regression check:
+
+```bash
+bundle exec rake bench
+```
+
+This writes a JSON report to `benchmarks/reports/latest.json` and compares metrics
+against `benchmarks/baseline.json`. To refresh the baseline:
+
+```bash
+MUZE_BENCH_UPDATE_BASELINE=1 bundle exec rake bench
+```
+
 Optional native extension:
 
 ```bash

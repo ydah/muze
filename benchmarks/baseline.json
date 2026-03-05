@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-05T08:25:13Z",
+  "ruby_version": "4.0.0",
+  "metrics": {
+    "istft_reconstruction_error": {
+      "value": 0.014255197813810787,
+      "unit": "rmse",
+      "direction": "lower",
+      "max_regression_ratio": 1.2
+    },
+    "time_stretch_processing_seconds": {
+      "value": 0.0018263333218379153,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0
+    },
+    "pitch_shift_processing_seconds": {
+      "value": 0.0046148888973726165,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0
+    }
+  }
+}
