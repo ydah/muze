@@ -7,12 +7,37 @@ RSpec.describe Muze::Effects do
       Array.new(sr) { |index| Math.sin((2.0 * Math::PI * 440.0 * index) / sr) }
     )
   end
+  let(:long_signal) do
+    duration = 2.0
+    sample_count = (sr * duration).to_i
+    Numo::SFloat.cast(
+      Array.new(sample_count) { |index| Math.sin((2.0 * Math::PI * 440.0 * index) / sr) }
+    )
+  end
 
   describe ".time_stretch" do
     it "changes output length by rate" do
       stretched = described_class.time_stretch(signal, rate: 2.0)
 
       expect(stretched.size).to be_within(1).of(signal.size / 2)
+    end
+
+    it "keeps the signal unchanged at rate=1.0" do
+      stretched = described_class.time_stretch(signal, rate: 1.0)
+      max_error = (stretched - signal).abs.max
+
+      expect(max_error).to be < 1.0e-6
+    end
+
+    it "preserves dominant frequency better than linear interpolation baseline" do
+      stretched = described_class.time_stretch(long_signal, rate: 2.0)
+      baseline = naive_linear_time_stretch(long_signal, rate: 2.0)
+
+      phase_vocoder_peak = dominant_frequency(stretched, sr:)
+      baseline_peak = dominant_frequency(baseline, sr:)
+
+      expect((phase_vocoder_peak - 440.0).abs).to be < (baseline_peak - 440.0).abs
+      expect(phase_vocoder_peak).to be_within(12.0).of(440.0)
     end
   end
 
@@ -35,5 +60,31 @@ RSpec.describe Muze::Effects do
       expect(start_idx).to be > 0
       expect(end_idx).to be > start_idx
     end
+  end
+
+  def naive_linear_time_stretch(y, rate:)
+    source = y.to_a
+    target_length = [(source.length / rate).round, 1].max
+
+    stretched = Array.new(target_length, 0.0)
+    target_length.times do |index|
+      source_position = index * rate
+      left = source_position.floor
+      right = [left + 1, source.length - 1].min
+      alpha = source_position - left
+      stretched[index] = ((1.0 - alpha) * source[left]) + (alpha * source[right])
+    end
+
+    Numo::SFloat.cast(stretched)
+  end
+
+  def dominant_frequency(y, sr:)
+    n_fft = 2048
+    stft_matrix = Muze.stft(y, n_fft:, hop_length: 256)
+    magnitude, = Muze.magphase(stft_matrix)
+    averaged = magnitude.mean(1).to_a
+    peak_bin = averaged.each_with_index.max_by { |value, _index| value }[1]
+
+    peak_bin * sr.to_f / n_fft
   end
 end
