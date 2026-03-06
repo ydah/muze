@@ -1,8 +1,6 @@
 # Muze
 
-Muze is a Ruby audio feature extraction library inspired by `librosa`.
-It provides a full pipeline from audio loading to spectral analysis, feature extraction,
-rhythm analysis, effects, and lightweight visualization.
+Muze is a Ruby audio feature extraction library that provides a full pipeline from audio loading to spectral analysis, feature extraction, rhythm analysis, effects, and lightweight visualization.
 
 ## Installation
 
@@ -38,15 +36,17 @@ RAF.specshow(Muze.power_to_db(mel), output: "mel.svg")
 
 ## Main Features
 
-- Audio I/O: `RAF.load` (`wav`, `flac`, `mp3`, `ogg`)
-- STFT stack: `RAF.stft`, `RAF.istft`, `RAF.magphase`
-- Scale helpers: `RAF.power_to_db`, `RAF.amplitude_to_db`
-- Filters: `RAF.mel`, `RAF.chroma`
-- Features: `RAF.melspectrogram`, `RAF.mfcc`, `RAF.delta`
-- Spectral descriptors: centroid, bandwidth, rolloff, flatness, contrast, zcr, rms
-- Rhythm: `RAF.onset_strength`, `RAF.onset_detect`, `RAF.beat_track`, `RAF.tempogram`
-- Effects: `RAF.hpss`, `RAF.time_stretch`, `RAF.pitch_shift`, `RAF.trim`
-- Visualization: `RAF.specshow`, `RAF.waveshow`
+| Area | APIs |
+| --- | --- |
+| Audio I/O | `RAF.load` (`wav`, `flac`, `mp3`, `ogg`) |
+| STFT stack | `RAF.stft`, `RAF.istft`, `RAF.magphase` |
+| Scale helpers | `RAF.power_to_db`, `RAF.amplitude_to_db` |
+| Filters | `RAF.mel`, `RAF.chroma` |
+| Features | `RAF.melspectrogram`, `RAF.mfcc`, `RAF.delta` |
+| Spectral descriptors | centroid, bandwidth, rolloff, flatness, contrast, zcr, rms |
+| Rhythm | `RAF.onset_strength`, `RAF.onset_detect`, `RAF.beat_track`, `RAF.tempogram` |
+| Effects | `RAF.hpss`, `RAF.time_stretch`, `RAF.pitch_shift`, `RAF.trim` |
+| Visualization | `RAF.specshow`, `RAF.waveshow` |
 
 `wav` is loaded with `wavify`, and `flac/mp3/ogg` requires `ffmpeg` + `ffprobe`
 available on `PATH`.
@@ -88,4 +88,4 @@ bundle exec yard doc
 
 ## License
 
-MIT
+Muze is available under the [MIT License](./LICENSE.txt).
