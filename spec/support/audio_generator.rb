@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require "fileutils"
-require "wavify"
+require "wavify/errors"
+require "wavify/core/format"
+require "wavify/core/duration"
+require "wavify/core/sample_buffer"
+require "wavify/codecs/base"
+require "wavify/codecs/wav"
 
 module SpecAudioGenerator
   module_function
@@ -44,6 +49,6 @@ module SpecAudioGenerator
       sample_format: :pcm
     )
     buffer = Wavify::Core::SampleBuffer.new(interleaved_samples, format)
-    Wavify::Audio.new(buffer).write(path)
+    Wavify::Codecs::Wav.write(path, buffer, format: format)
   end
 end
