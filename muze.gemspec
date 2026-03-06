@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.authors = ["Yudai Takada"]
   spec.email = ["t.yudai92@gmail.com"]
 
-  spec.summary = "Ruby audio feature extraction toolkit inspired by librosa"
+  spec.summary = "Ruby audio feature extraction toolkit"
   spec.description = "Muze provides audio loading, STFT, mel features, MFCC, rhythm analysis, and effects in Ruby."
   spec.homepage = "https://github.com/ydah/muze"
   spec.license = "MIT"
