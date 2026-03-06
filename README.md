@@ -2,6 +2,8 @@
 
 Muze is a Ruby audio feature extraction library that provides a full pipeline from audio loading to spectral analysis, feature extraction, rhythm analysis, effects, and lightweight visualization.
 
+![Image](https://github.com/user-attachments/assets/1e88395b-c715-4c9a-b458-d1cb9fceb848)
+
 ## Installation
 
 Add this line to your application's Gemfile:
