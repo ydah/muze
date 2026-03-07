@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.email = ["t.yudai92@gmail.com"]
 
   spec.summary = "Ruby audio feature extraction toolkit"
-  spec.description = "Muze provides audio loading, STFT, mel features, MFCC, rhythm analysis, and effects in Ruby."
+  spec.description = "Muze is a Ruby audio analysis and feature extraction library that provides audio loading, spectral analysis, feature extraction, rhythm analysis, and audio effects."
   spec.homepage = "https://github.com/ydah/muze"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
