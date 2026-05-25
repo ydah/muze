@@ -10,16 +10,31 @@ module Muze
       # @param y [Numo::SFloat, Array<Float>] waveform signal
       # @param orig_sr [Integer] source sampling rate
       # @param target_sr [Integer] destination sampling rate
-      # @param res_type [Symbol] :linear or :sinc
+      # @param res_type [Symbol] :nearest, :linear, or :sinc
+      # @param target_length [Integer, nil]
+      # @param taps [Integer]
+      # @param beta [Float]
+      # @param cutoff [Float, nil]
       # @return [Numo::SFloat] resampled waveform
-      def resample(y, orig_sr:, target_sr:, res_type: :sinc)
+      def resample(y, orig_sr:, target_sr:, res_type: :sinc, target_length: nil, taps: 16, beta: 8.6, cutoff: nil)
         validate_sample_rates!(orig_sr, target_sr)
-        signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
-        return Numo::SFloat.cast(signal) if signal.empty? || orig_sr == target_sr
+        validate_resample_options!(target_length:, taps:, beta:, cutoff:)
+
+        signal = Numo::SFloat.cast(y)
+        return signal if signal.empty?
+
+        if signal.ndim == 2
+          return resample_channels(signal, orig_sr:, target_sr:, res_type:, target_length:, taps:, beta:, cutoff:)
+        end
+
+        source = signal.to_a
+        return adjust_length(source, target_length) if orig_sr == target_sr && target_length
+        return signal if orig_sr == target_sr
 
         case res_type
-        when :linear then linear_resample(signal, orig_sr, target_sr)
-        when :sinc then sinc_resample(signal, orig_sr, target_sr)
+        when :nearest then nearest_resample(source, orig_sr, target_sr, target_length:)
+        when :linear then linear_resample(source, orig_sr, target_sr, target_length:)
+        when :sinc then sinc_resample(source, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:)
         else
           raise Muze::ParameterError, "Unsupported res_type: #{res_type}"
         end
@@ -32,17 +47,73 @@ module Muze
       end
       private_class_method :validate_sample_rates!
 
-      def linear_resample(signal, orig_sr, target_sr)
+      def validate_resample_options!(target_length:, taps:, beta:, cutoff:)
+        raise Muze::ParameterError, "target_length must be positive" if target_length && (!target_length.is_a?(Integer) || target_length <= 0)
+        raise Muze::ParameterError, "taps must be positive" unless taps.is_a?(Integer) && taps.positive?
+        raise Muze::ParameterError, "beta must be finite and non-negative" unless beta.respond_to?(:finite?) && beta.finite? && !beta.negative?
+        return if cutoff.nil? || (cutoff.respond_to?(:finite?) && cutoff.finite? && cutoff.positive? && cutoff <= 1.0)
+
+        raise Muze::ParameterError, "cutoff must be > 0 and <= 1"
+      end
+      private_class_method :validate_resample_options!
+
+      def resample_channels(signal, orig_sr:, target_sr:, res_type:, target_length:, taps:, beta:, cutoff:)
+        frames, channels = signal.shape
+        return signal if frames.zero? || channels.zero?
+
+        resampled_channels = channels.times.map do |channel_index|
+          resample(
+            signal[true, channel_index],
+            orig_sr:,
+            target_sr:,
+            res_type:,
+            target_length:,
+            taps:,
+            beta:,
+            cutoff:
+          ).to_a
+        end
+
+        output_length = resampled_channels.first.length
+        output = Numo::SFloat.zeros(output_length, channels)
+        channels.times do |channel_index|
+          output[true, channel_index] = Numo::SFloat.cast(resampled_channels[channel_index])
+        end
+        output
+      end
+      private_class_method :resample_channels
+
+      def output_length(source_length, orig_sr, target_sr, target_length:)
+        target_length || [(source_length * target_sr.to_f / orig_sr).round, 1].max
+      end
+      private_class_method :output_length
+
+      def nearest_resample(signal, orig_sr, target_sr, target_length:)
         source_length = signal.length
         return Numo::SFloat.cast(signal) if source_length <= 1
 
-        target_length = [(source_length * target_sr.to_f / orig_sr).round, 1].max
-        return Numo::SFloat.cast(signal[0, target_length]) if target_length <= 1
+        target_size = output_length(source_length, orig_sr, target_sr, target_length:)
+        scale = source_length.to_f / target_size
+        output = Array.new(target_size) do |index|
+          source_index = [(index * scale).round, source_length - 1].min
+          signal[source_index]
+        end
 
-        scale = (source_length - 1).to_f / (target_length - 1)
-        output = Array.new(target_length, 0.0)
+        Numo::SFloat.cast(output)
+      end
+      private_class_method :nearest_resample
 
-        target_length.times do |index|
+      def linear_resample(signal, orig_sr, target_sr, target_length:)
+        source_length = signal.length
+        return Numo::SFloat.cast(signal) if source_length <= 1
+
+        target_size = output_length(source_length, orig_sr, target_sr, target_length:)
+        return Numo::SFloat.cast(signal[0, target_size]) if target_size <= 1
+
+        scale = (source_length - 1).to_f / (target_size - 1)
+        output = Array.new(target_size, 0.0)
+
+        target_size.times do |index|
           source_position = index * scale
           left = source_position.floor
           right = [left + 1, source_length - 1].min
@@ -54,17 +125,15 @@ module Muze
       end
       private_class_method :linear_resample
 
-      def sinc_resample(signal, orig_sr, target_sr)
+      def sinc_resample(signal, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:)
         ratio = target_sr.to_f / orig_sr
-        target_length = [(signal.length * ratio).round, 1].max
-        taps = 16
-        beta = 8.6
-        cutoff = [ratio, 1.0].min
+        target_size = output_length(signal.length, orig_sr, target_sr, target_length:)
+        cutoff ||= [ratio, 1.0].min
 
         i0_beta = bessel_i0(beta)
-        output = Array.new(target_length, 0.0)
+        output = Array.new(target_size, 0.0)
 
-        target_length.times do |index|
+        target_size.times do |index|
           source_position = index / ratio
           left = source_position.floor - taps + 1
           right = source_position.floor + taps
@@ -91,6 +160,14 @@ module Muze
         Numo::SFloat.cast(output)
       end
       private_class_method :sinc_resample
+
+      def adjust_length(signal, target_length)
+        return Numo::SFloat.cast(signal) unless target_length
+        return Numo::SFloat.cast(signal[0, target_length]) if signal.length >= target_length
+
+        Numo::SFloat.cast(signal + Array.new(target_length - signal.length, 0.0))
+      end
+      private_class_method :adjust_length
 
       def sinc(value)
         return 1.0 if value.abs < EPSILON

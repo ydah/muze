@@ -14,17 +14,18 @@ module Muze
       # @param window [Symbol]
       # @param center [Boolean]
       # @param pad_mode [Symbol]
+      # @param pad_end [Boolean]
       # @return [Numo::DComplex] shape: [1 + n_fft/2, frames]
-      def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect)
-        _ = pad_mode
+      def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false)
         win_length ||= n_fft
         validate_stft_params!(n_fft:, hop_length:, win_length:)
+        validate_pad_mode!(pad_mode)
 
-        signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
-        signal = reflect_pad(signal, n_fft / 2) if center
+        signal = signal_to_a(y)
+        signal = pad_signal(signal, n_fft / 2, pad_mode) if center
         signal = signal.empty? ? [0.0] : signal
 
-        frames = frame_signal(signal, n_fft, hop_length)
+        frames = frame_signal(signal, n_fft, hop_length, pad_end:)
         window_values = Muze::Core::Windows.resolve(window, win_length).to_a
         window_offset = (n_fft - win_length) / 2
 
@@ -38,7 +39,7 @@ module Muze
             windowed[frame_index_in_window] = frame[frame_index_in_window] * window_values[index]
           end
 
-          spectrum = fft_complex(windowed.map { |value| Complex(value, 0.0) })
+          spectrum = fft_real(windowed)
           frequency_bins.times { |bin| stft_matrix[bin, frame_index] = spectrum[bin] }
         end
 
@@ -66,9 +67,7 @@ module Muze
 
         frame_count.times do |frame_index|
           half_spectrum = Array.new(frequency_bins) { |bin| stft_matrix[bin, frame_index] }
-          mirrored = half_spectrum[1...-1].reverse.map(&:conj)
-          full_spectrum = half_spectrum + mirrored
-          time_domain = ifft_complex(full_spectrum).map(&:real)
+          time_domain = ifft_real(half_spectrum).to_a
 
           win_length.times do |index|
             output_index = (frame_index * hop_length) + index + window_offset
@@ -96,10 +95,13 @@ module Muze
       end
 
       # @param stft_matrix [Numo::DComplex]
+      # @param eps [Float]
       # @return [Array<Numo::SFloat, Numo::DComplex>]
-      def magphase(stft_matrix)
+      def magphase(stft_matrix, eps: EPSILON)
+        raise Muze::ParameterError, "eps must be positive" unless eps.positive?
+
         magnitude = stft_matrix.abs.cast_to(Numo::SFloat)
-        phase = stft_matrix / (magnitude + EPSILON)
+        phase = stft_matrix / (magnitude + eps)
         [magnitude, phase]
       end
 
@@ -107,9 +109,15 @@ module Muze
       # @param ref [Float, Symbol, Proc]
       # @param amin [Float]
       # @param top_db [Float, nil]
+      # @param abs [Boolean]
       # @return [Numo::SFloat]
-      def amplitude_to_db(s, ref: 1.0, amin: 1.0e-5, top_db: 80.0)
-        magnitude = s.is_a?(Numo::DComplex) ? s.abs.cast_to(Numo::SFloat) : Numo::SFloat.cast(s)
+      def amplitude_to_db(s, ref: 1.0, amin: 1.0e-5, top_db: 80.0, abs: false)
+        magnitude = if s.is_a?(Numo::DComplex)
+                      s.abs.cast_to(Numo::SFloat)
+                    else
+                      values = Numo::SFloat.cast(s)
+                      abs ? values.abs : values
+                    end
         log_scale(magnitude, ref:, amin:, top_db:, multiplier: 20.0)
       end
 
@@ -137,6 +145,50 @@ module Muze
         Numo::SFloat.cast(ref.to_f * Numo::NMath.exp((Numo::SFloat.cast(s_db) / 10.0) * Math.log(10.0)))
       end
 
+      # @param sr [Integer]
+      # @param n_fft [Integer]
+      # @return [Numo::SFloat]
+      def fft_frequencies(sr:, n_fft:)
+        raise Muze::ParameterError, "sr must be positive" unless sr.positive?
+        raise Muze::ParameterError, "n_fft must be positive" unless n_fft.positive?
+
+        Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft })
+      end
+
+      # @param frames [Integer, Array<Integer>, Numo::NArray]
+      # @param sr [Integer]
+      # @param hop_length [Integer]
+      # @return [Float, Numo::SFloat]
+      def frames_to_time(frames, sr:, hop_length:)
+        samples_to_time(frames_to_samples(frames, hop_length:), sr:)
+      end
+
+      # @param times [Float, Array<Float>, Numo::NArray]
+      # @param sr [Integer]
+      # @param hop_length [Integer]
+      # @return [Integer, Numo::Int64]
+      def time_to_frames(times, sr:, hop_length:)
+        samples_to_frames(time_to_samples(times, sr:), hop_length:)
+      end
+
+      # @param frames [Integer, Array<Integer>, Numo::NArray]
+      # @param hop_length [Integer]
+      # @return [Integer, Numo::Int64]
+      def frames_to_samples(frames, hop_length:)
+        raise Muze::ParameterError, "hop_length must be positive" unless hop_length.positive?
+
+        map_scalar_or_array(frames) { |frame| (frame.to_i * hop_length).to_i }
+      end
+
+      # @param samples [Integer, Array<Integer>, Numo::NArray]
+      # @param hop_length [Integer]
+      # @return [Integer, Numo::Int64]
+      def samples_to_frames(samples, hop_length:)
+        raise Muze::ParameterError, "hop_length must be positive" unless hop_length.positive?
+
+        map_scalar_or_array(samples) { |sample| (sample.to_i / hop_length.to_f).floor }
+      end
+
       def adjust_length(signal, length)
         return signal[0, length] if signal.length >= length
 
@@ -145,6 +197,11 @@ module Muze
       private_class_method :adjust_length
 
       def log_scale(values, ref:, amin:, top_db:, multiplier:)
+        raise Muze::ParameterError, "amin must be positive" unless amin.positive?
+        raise Muze::ParameterError, "top_db must be non-negative" if top_db && top_db.negative?
+        validate_finite_values!(values, "input")
+        raise Muze::ParameterError, "input values must be non-negative" if contains_negative?(values)
+
         clipped = values.clip(amin, Float::INFINITY)
         reference = reference_value(ref, clipped, amin)
         base = multiplier * Math.log10(reference)
@@ -161,9 +218,12 @@ module Muze
         value = case ref
                 when :max then values.max
                 when Proc then ref.call(values)
+                when Numeric then ref.to_f
                 else
-                  ref.to_f
+                  raise Muze::ParameterError, "ref must be numeric, :max, or a Proc"
                 end
+
+        raise Muze::ParameterError, "ref must be finite" unless value.finite?
 
         [value, amin].max
       end
@@ -171,61 +231,156 @@ module Muze
 
       def validate_stft_params!(n_fft:, hop_length:, win_length:)
         raise Muze::ParameterError, "n_fft must be positive" if n_fft <= 0
-        raise Muze::ParameterError, "n_fft must be a power of two" unless power_of_two?(n_fft)
+        raise Muze::ParameterError, "n_fft must be even" unless n_fft.even?
         raise Muze::ParameterError, "hop_length must be positive" if hop_length <= 0
         raise Muze::ParameterError, "hop_length must be <= n_fft" if hop_length > n_fft
         raise Muze::ParameterError, "win_length must be between 1 and n_fft" unless win_length.between?(1, n_fft)
       end
       private_class_method :validate_stft_params!
 
-      def power_of_two?(value)
-        (value & (value - 1)).zero?
-      end
-      private_class_method :power_of_two?
+      def validate_pad_mode!(pad_mode)
+        return if %i[reflect constant edge].include?(pad_mode)
 
-      def frame_signal(signal, n_fft, hop_length)
-        Muze::Native.frame_slices(signal, n_fft, hop_length)
+        raise Muze::ParameterError, "pad_mode must be :reflect, :constant, or :edge"
+      end
+      private_class_method :validate_pad_mode!
+
+      def signal_to_a(y)
+        raise Muze::ParameterError, "y must not be nil" if y.nil?
+
+        signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+        validate_finite_array!(signal, "y")
+        signal
+      end
+      private_class_method :signal_to_a
+
+      def frame_signal(signal, n_fft, hop_length, pad_end:)
+        return Muze::Native.frame_slices(signal, n_fft, hop_length) unless pad_end
+
+        return [adjust_length(signal, n_fft)] if signal.length <= n_fft
+
+        frame_count = ((signal.length - n_fft).to_f / hop_length).ceil + 1
+        Array.new(frame_count) do |index|
+          start = index * hop_length
+          adjust_length(signal[start, n_fft] || [], n_fft)
+        end
       end
       private_class_method :frame_signal
 
-      def reflect_pad(signal, pad)
-        return signal if pad <= 0 || signal.length <= 1
+      def pad_signal(signal, pad, mode)
+        return signal if pad <= 0
 
-        front = signal[1, pad].to_a.reverse
-        back = signal[-(pad + 1), pad].to_a.reverse
+        case mode
+        when :constant
+          Array.new(pad, 0.0) + signal + Array.new(pad, 0.0)
+        when :edge
+          edge_pad(signal, pad)
+        when :reflect
+          reflect_pad(signal, pad)
+        end
+      end
+      private_class_method :pad_signal
+
+      def edge_pad(signal, pad)
+        return Array.new(pad * 2, 0.0) if signal.empty?
+
+        Array.new(pad, signal.first) + signal + Array.new(pad, signal.last)
+      end
+      private_class_method :edge_pad
+
+      def reflect_pad(signal, pad)
+        return Array.new(pad, 0.0) + signal + Array.new(pad, 0.0) if signal.length <= 1
+
+        front = reflected_values(signal, pad, from_start: true)
+        back = reflected_values(signal, pad, from_start: false)
         front + signal + back
       end
       private_class_method :reflect_pad
 
-      def fft_complex(values)
-        length = values.length
-        return values if length <= 1
-
-        raise Muze::ParameterError, "FFT length must be a power of two" unless power_of_two?(length)
-
-        even = fft_complex(values.values_at(*0.step(length - 1, 2)))
-        odd = fft_complex(values.values_at(*1.step(length - 1, 2)))
-
-        output = Array.new(length)
-        half = length / 2
-
-        half.times do |k|
-          twiddle = Complex.polar(1.0, -2.0 * Math::PI * k / length) * odd[k]
-          output[k] = even[k] + twiddle
-          output[k + half] = even[k] - twiddle
+      def reflected_values(signal, pad, from_start:)
+        period = (signal.length - 1) * 2
+        Array.new(pad) do |index|
+          offset = pad - index
+          reflected_index = reflect_index(from_start ? -offset : signal.length - 1 + offset, period)
+          signal[reflected_index]
         end
-
-        output
       end
-      private_class_method :fft_complex
+      private_class_method :reflected_values
 
-      def ifft_complex(values)
-        conjugated = values.map(&:conj)
-        transformed = fft_complex(conjugated)
-        scale = values.length.to_f
-        transformed.map { |value| value.conj / scale }
+      def reflect_index(index, period)
+        value = index % period
+        value = period - value if value >= (period / 2) + 1
+        value
       end
-      private_class_method :ifft_complex
+      private_class_method :reflect_index
+
+      def fft_real(values)
+        Numo::Pocketfft.rfft(Numo::DFloat.cast(values))
+      rescue ArgumentError, TypeError => e
+        raise Muze::ParameterError, "FFT failed: #{e.message}"
+      end
+      private_class_method :fft_real
+
+      def ifft_real(values)
+        Numo::Pocketfft.irfft(Numo::DComplex.cast(values))
+      rescue ArgumentError, TypeError => e
+        raise Muze::ParameterError, "inverse FFT failed: #{e.message}"
+      end
+      private_class_method :ifft_real
+
+      def contains_negative?(values)
+        flatten_values(values).any?(&:negative?)
+      end
+      private_class_method :contains_negative?
+
+      def validate_finite_values!(values, label)
+        validate_finite_array!(flatten_values(values), label)
+      end
+      private_class_method :validate_finite_values!
+
+      def validate_finite_array!(values, label)
+        return if values.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+        raise Muze::ParameterError, "#{label} must contain only finite numeric values"
+      end
+      private_class_method :validate_finite_array!
+
+      def flatten_values(values)
+        values.is_a?(Numo::NArray) ? values.to_a.flatten : Array(values).flatten
+      end
+      private_class_method :flatten_values
+
+      def time_to_samples(times, sr:)
+        raise Muze::ParameterError, "sr must be positive" unless sr.positive?
+
+        map_scalar_or_array(times) { |time| (time.to_f * sr).round }
+      end
+      private_class_method :time_to_samples
+
+      def samples_to_time(samples, sr:)
+        raise Muze::ParameterError, "sr must be positive" unless sr.positive?
+
+        map_scalar_or_array(samples) { |sample| sample.to_f / sr }
+      end
+      private_class_method :samples_to_time
+
+      def map_scalar_or_array(value)
+        if value.is_a?(Numo::NArray)
+          Numo::SFloat.cast(value.to_a.flatten.map { |item| yield(item) }).reshape(*value.shape)
+        elsif value.is_a?(Array)
+          Numo::SFloat.cast(value.flatten.map { |item| yield(item) }).reshape(*array_shape(value))
+        else
+          yield(value)
+        end
+      end
+      private_class_method :map_scalar_or_array
+
+      def array_shape(value)
+        return [value.length] unless value.first.is_a?(Array)
+
+        [value.length, value.first.length]
+      end
+      private_class_method :array_shape
     end
   end
 end

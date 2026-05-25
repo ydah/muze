@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "numo/narray"
+require "numo/pocketfft"
 
 require_relative "muze/version"
 require_relative "muze/errors"
@@ -41,9 +41,10 @@ module Muze
     # @param window [Symbol]
     # @param center [Boolean]
     # @param pad_mode [Symbol]
+    # @param pad_end [Boolean]
     # @return [Numo::DComplex]
-    def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect)
-      Muze::Core::STFT.stft(y, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:)
+    def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false)
+      Muze::Core::STFT.stft(y, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end:)
     end
 
     # @param stft_matrix [Numo::DComplex]
@@ -59,8 +60,8 @@ module Muze
 
     # @param stft_matrix [Numo::DComplex]
     # @return [Array(Numo::SFloat, Numo::DComplex)]
-    def magphase(stft_matrix)
-      Muze::Core::STFT.magphase(stft_matrix)
+    def magphase(stft_matrix, eps: Muze::Core::STFT::EPSILON)
+      Muze::Core::STFT.magphase(stft_matrix, eps:)
     end
 
     # @param s [Numo::NArray]
@@ -68,8 +69,8 @@ module Muze
     # @param amin [Float]
     # @param top_db [Float, nil]
     # @return [Numo::SFloat]
-    def amplitude_to_db(s, ref: 1.0, amin: 1.0e-5, top_db: 80.0)
-      Muze::Core::STFT.amplitude_to_db(s, ref:, amin:, top_db:)
+    def amplitude_to_db(s, ref: 1.0, amin: 1.0e-5, top_db: 80.0, abs: false)
+      Muze::Core::STFT.amplitude_to_db(s, ref:, amin:, top_db:, abs:)
     end
 
     # @param s [Numo::NArray]
@@ -95,13 +96,39 @@ module Muze
       Muze::Core::STFT.db_to_power(s_db, ref:)
     end
 
+    # @return [Numo::SFloat]
+    def fft_frequencies(sr:, n_fft:)
+      Muze::Core::STFT.fft_frequencies(sr:, n_fft:)
+    end
+
+    # @return [Float, Numo::SFloat]
+    def frames_to_time(frames, sr:, hop_length:)
+      Muze::Core::STFT.frames_to_time(frames, sr:, hop_length:)
+    end
+
+    # @return [Integer, Numo::SFloat]
+    def time_to_frames(times, sr:, hop_length:)
+      Muze::Core::STFT.time_to_frames(times, sr:, hop_length:)
+    end
+
+    # @return [Integer, Numo::SFloat]
+    def frames_to_samples(frames, hop_length:)
+      Muze::Core::STFT.frames_to_samples(frames, hop_length:)
+    end
+
+    # @return [Integer, Numo::SFloat]
+    def samples_to_frames(samples, hop_length:)
+      Muze::Core::STFT.samples_to_frames(samples, hop_length:)
+    end
+
     # @param y [Numo::SFloat, Array<Float>]
     # @param orig_sr [Integer]
     # @param target_sr [Integer]
     # @param res_type [Symbol]
+    # @param target_length [Integer, nil]
     # @return [Numo::SFloat]
-    def resample(y, orig_sr:, target_sr:, res_type: :sinc)
-      Muze::Core::Resample.resample(y, orig_sr:, target_sr:, res_type:)
+    def resample(y, orig_sr:, target_sr:, res_type: :sinc, target_length: nil, taps: 16, beta: 8.6, cutoff: nil)
+      Muze::Core::Resample.resample(y, orig_sr:, target_sr:, res_type:, target_length:, taps:, beta:, cutoff:)
     end
 
     # @param sr [Integer]

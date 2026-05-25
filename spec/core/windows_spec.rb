@@ -35,4 +35,20 @@ RSpec.describe Muze::Core::Windows do
       expect(window.to_a).to eq([1.0, 1.0, 1.0, 1.0])
     end
   end
+
+  describe ".resolve" do
+    it "accepts array windows" do
+      expect(described_class.resolve([0.0, 1.0, 0.0], 3).to_a).to eq([0.0, 1.0, 0.0])
+    end
+
+    it "accepts proc windows" do
+      expect(described_class.resolve(->(n) { Array.new(n, 0.5) }, 2).to_a).to eq([0.5, 0.5])
+    end
+
+    it "supports additional built-in windows" do
+      expect(described_class.resolve(:kaiser, 8).size).to eq(8)
+      expect(described_class.resolve(:tukey, 8).size).to eq(8)
+      expect(described_class.resolve(:blackman_harris, 8).size).to eq(8)
+    end
+  end
 end

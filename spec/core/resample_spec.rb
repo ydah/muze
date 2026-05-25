@@ -8,5 +8,20 @@ RSpec.describe Muze::Core::Resample do
 
       expect(resampled.size).to eq(50)
     end
+
+    it "resamples multi-channel input directly" do
+      signal = Numo::SFloat.cast([[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]])
+      result = described_class.resample(signal, orig_sr: 3, target_sr: 6, res_type: :linear)
+
+      expect(result.shape).to eq([6, 2])
+    end
+
+    it "supports nearest and target_length" do
+      signal = Numo::SFloat[0.0, 1.0, 0.0]
+      result = described_class.resample(signal, orig_sr: 3, target_sr: 9, res_type: :nearest, target_length: 5)
+
+      expect(result.size).to eq(5)
+      expect(result.to_a).to all(satisfy { |value| [0.0, 1.0].include?(value) })
+    end
   end
 end
