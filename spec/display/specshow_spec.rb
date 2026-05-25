@@ -70,6 +70,16 @@ RSpec.describe Muze::Display do
       expect(svg).to include("<path")
       expect(svg).to include("data-channels='split'")
     end
+
+    it "validates waveform display input" do
+      expect do
+        described_class.waveshow([0.0, Float::NAN])
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.waveshow([0.0], normalize: :yes)
+      end.to raise_error(Muze::ParameterError, /normalize/)
+    end
   end
 
   describe ".onsetshow" do
@@ -78,6 +88,12 @@ RSpec.describe Muze::Display do
 
       expect(svg).to include("data-kind='onset'")
       expect(svg.scan("<rect").length).to be >= 4
+    end
+
+    it "validates onset display normalization" do
+      expect do
+        described_class.onsetshow([0.0], normalize: :yes)
+      end.to raise_error(Muze::ParameterError, /normalize/)
     end
   end
 end

@@ -277,8 +277,7 @@ module Muze
     def zero_crossing_rate(y, frame_length: 2048, hop_length: 512, threshold: 0.0, center: false)
       raise Muze::ParameterError, "threshold must be >= 0" if threshold.negative?
 
-      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
-      validate_finite_array!(signal, "y")
+      signal = mono_signal_to_a(y, "y")
       signal = Array.new(frame_length / 2, 0.0) + signal + Array.new(frame_length / 2, 0.0) if center
       frames = Muze::Core::Frames.slice(signal, frame_length:, hop_length:)
       values = frames.map do |frame|
@@ -310,8 +309,7 @@ module Muze
         return Numo::SFloat[values].reshape(1, values.length)
       end
 
-      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
-      validate_finite_array!(signal, "y")
+      signal = mono_signal_to_a(y, "y")
       signal = Array.new(frame_length / 2, 0.0) + signal + Array.new(frame_length / 2, 0.0) if center
       frames = Muze::Core::Frames.slice(signal, frame_length:, hop_length:)
       values = frames.map do |frame|
@@ -328,6 +326,11 @@ module Muze
     # @param win_length [Integer]
     # @return [Numo::SFloat]
     def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384, normalize: false)
+      raise Muze::ParameterError, "sr must be a positive integer" unless sr.is_a?(Integer) && sr.positive?
+      raise Muze::ParameterError, "hop_length must be a positive integer" unless hop_length.is_a?(Integer) && hop_length.positive?
+      raise Muze::ParameterError, "win_length must be a positive integer" unless win_length.is_a?(Integer) && win_length.positive?
+      raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
+
       envelope = if onset_envelope
                    onset_envelope.is_a?(Numo::NArray) ? onset_envelope.to_a : Array(onset_envelope)
                  else
@@ -470,5 +473,13 @@ module Muze
       raise Muze::ParameterError, "#{label} must contain only finite numeric values"
     end
     private_class_method :validate_finite_array!
+
+    def mono_signal_to_a(value, label)
+      signal = Muze::Core::Audio.validate_audio!(value, allow_empty: true)
+      raise Muze::ParameterError, "#{label} must be mono audio" if signal.ndim == 2
+
+      signal.to_a
+    end
+    private_class_method :mono_signal_to_a
   end
 end

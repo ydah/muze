@@ -60,6 +60,12 @@ RSpec.describe Muze::Effects do
       expect do
         described_class.hpss(signal, kernel_size: 10)
       end.to raise_error(Muze::ParameterError, /kernel_size/)
+      expect do
+        described_class.hpss([0.0, Float::NAN])
+      end.to raise_error(Muze::ParameterError, /finite/)
+      expect do
+        described_class.hpss(signal, return_masks: :yes)
+      end.to raise_error(Muze::ParameterError, /return_masks/)
     end
 
     it "processes multi-channel input channel-wise" do

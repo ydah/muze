@@ -20,7 +20,7 @@ module Muze
         validate_sample_rates!(orig_sr, target_sr)
         validate_resample_options!(target_length:, taps:, beta:, cutoff:)
 
-        signal = Numo::SFloat.cast(y)
+        signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
         return signal if signal.empty?
 
         if signal.ndim == 2

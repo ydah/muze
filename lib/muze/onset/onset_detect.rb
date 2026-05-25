@@ -12,11 +12,18 @@ module Muze
     # @param n_fft [Integer]
     # @return [Numo::SFloat] onset envelope per frame
     def onset_strength(y: nil, sr: 22_050, s: nil, hop_length: 512, n_fft: 2048, lag: 1, log: false, max_size: 1, normalize: false)
-      raise Muze::ParameterError, "lag must be positive" unless lag.positive?
-      raise Muze::ParameterError, "max_size must be positive" unless max_size.positive?
+      validate_positive_integer!(sr, "sr")
+      validate_positive_integer!(hop_length, "hop_length")
+      validate_positive_integer!(n_fft, "n_fft")
+      validate_positive_integer!(lag, "lag")
+      validate_positive_integer!(max_size, "max_size")
+      raise Muze::ParameterError, "log must be true or false" unless [true, false].include?(log)
+      raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
 
       spectrum = if s
-                   Numo::SFloat.cast(s)
+                   provided = Numo::SFloat.cast(s)
+                   validate_finite_array!(provided.to_a.flatten, "s")
+                   provided
                  else
                    Muze::Feature.melspectrogram(y:, sr:, n_fft:, hop_length:, n_mels: 40)
                  end
@@ -47,17 +54,28 @@ module Muze
     # @param units [Symbol] :frames, :samples, or :time
     # @return [Array<Integer, Float>]
     def onset_detect(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, backtrack: false, units: :frames, pre_max: 1, post_max: 1, pre_avg: 1, post_avg: 1, delta: nil, wait: 0, adaptive: false, energy: nil)
+      validate_positive_integer!(sr, "sr")
+      validate_positive_integer!(hop_length, "hop_length")
+      validate_peak_picker_args!(pre_max:, post_max:, pre_avg:, post_avg:, wait:, delta:)
+      raise Muze::ParameterError, "backtrack must be true or false" unless [true, false].include?(backtrack)
+      raise Muze::ParameterError, "adaptive must be true or false" unless [true, false].include?(adaptive)
+
       envelope = if onset_envelope
                    onset_envelope.is_a?(Numo::NArray) ? onset_envelope.to_a : Array(onset_envelope)
                  else
                   onset_strength(y:, sr:, hop_length:).to_a
                  end
+      validate_finite_array!(envelope, "onset_envelope")
 
       return [] if envelope.length < 3
 
       threshold = delta || detection_threshold(envelope)
       peaks = detect_peaks(envelope, threshold, pre_max:, post_max:, pre_avg:, post_avg:, wait:, adaptive:)
-      peaks = backtrack_onsets(energy ? Array(energy) : envelope, peaks) if backtrack
+      if backtrack
+        energy_curve = energy ? Array(energy) : envelope
+        validate_finite_array!(energy_curve, "energy")
+        peaks = backtrack_onsets(energy_curve, peaks)
+      end
 
       convert_units(peaks, units:, sr:, hop_length:)
     end
@@ -134,5 +152,37 @@ module Muze
       values.sum(0.0) / values.length
     end
     private_class_method :average
+
+    def validate_peak_picker_args!(pre_max:, post_max:, pre_avg:, post_avg:, wait:, delta:)
+      {
+        pre_max: pre_max,
+        post_max: post_max,
+        pre_avg: pre_avg,
+        post_avg: post_avg,
+        wait: wait
+      }.each do |label, value|
+        next if value.is_a?(Integer) && !value.negative?
+
+        raise Muze::ParameterError, "#{label} must be a non-negative integer"
+      end
+      return if delta.nil? || (delta.respond_to?(:finite?) && delta.finite? && !delta.negative?)
+
+      raise Muze::ParameterError, "delta must be non-negative"
+    end
+    private_class_method :validate_peak_picker_args!
+
+    def validate_positive_integer!(value, label)
+      return if value.is_a?(Integer) && value.positive?
+
+      raise Muze::ParameterError, "#{label} must be a positive integer"
+    end
+    private_class_method :validate_positive_integer!
+
+    def validate_finite_array!(values, label)
+      return if values.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+      raise Muze::ParameterError, "#{label} must contain only finite numeric values"
+    end
+    private_class_method :validate_finite_array!
   end
 end

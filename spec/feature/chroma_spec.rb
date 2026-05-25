@@ -54,5 +54,11 @@ RSpec.describe Muze::Feature do
 
       expect(tonnetz.shape).to eq([6, chroma.shape[1]])
     end
+
+    it "rejects invalid chroma input" do
+      expect do
+        described_class.tonnetz(chroma: Numo::SFloat.zeros(12, 1).tap { |matrix| matrix[0, 0] = Float::NAN })
+      end.to raise_error(Muze::ParameterError, /finite/)
+    end
   end
 end

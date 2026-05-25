@@ -13,13 +13,15 @@ module Muze
     # @param rate [Float]
     # @return [Numo::SFloat]
     def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false, force_phase_vocoder: false)
-      raise Muze::ParameterError, "rate must be positive" unless rate.positive?
+      validate_positive_number!(rate, "rate")
       unless rate.between?(MIN_TIME_STRETCH_RATE, MAX_TIME_STRETCH_RATE)
         raise Muze::ParameterError, "rate must be between #{MIN_TIME_STRETCH_RATE} and #{MAX_TIME_STRETCH_RATE}"
       end
+      validate_optional_positive_integer!(n_fft, "n_fft")
+      validate_optional_positive_integer!(hop_length, "hop_length")
       raise Muze::ParameterError, "method must be :phase_vocoder, :ola, :wsola, or :linear" unless %i[phase_vocoder ola wsola linear].include?(method)
 
-      signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(Array(y))
+      signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       return apply_channels(signal) { |channel| time_stretch(channel, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:) } if signal.ndim == 2
       return signal if signal.empty? || rate == 1.0
       return linear_time_stretch(signal.to_a, rate) if method == :linear
@@ -40,10 +42,13 @@ module Muze
     # @param n_steps [Float]
     # @return [Numo::SFloat]
     def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto, normalize: false, clip: nil)
-      raise Muze::ParameterError, "sr must be positive" unless sr.positive?
-      raise Muze::ParameterError, "bins_per_octave must be positive" unless bins_per_octave.positive?
+      validate_positive_integer!(sr, "sr")
+      validate_positive_number!(bins_per_octave, "bins_per_octave")
+      raise Muze::ParameterError, "n_steps must be finite" unless n_steps.respond_to?(:finite?) && n_steps.finite?
+      raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
+      validate_positive_number!(clip, "clip") if clip
 
-      signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       return apply_channels(signal) { |channel| pitch_shift(channel, sr:, n_steps:, bins_per_octave:, res_type:, normalize:, clip:) } if signal.ndim == 2
       return signal if n_steps.zero?
 
@@ -67,7 +72,7 @@ module Muze
       raise Muze::ParameterError, "frame_length and hop_length must be positive" unless frame_length.positive? && hop_length.positive?
       raise Muze::ParameterError, "aggregate must be :mean or :max" unless %i[mean max].include?(aggregate)
 
-      signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       amplitude = sample_amplitude(signal, aggregate:)
       frames = Muze::Core::Frames.slice(amplitude, frame_length:, hop_length:, pad_end: true)
       energies = frames.map do |frame|
@@ -93,7 +98,8 @@ module Muze
     end
 
     def preemphasis(y, coef: 0.97)
-      matrix = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      validate_finite_number!(coef, "coef")
+      matrix = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       return apply_channels(matrix) { |channel| preemphasis(channel, coef:) } if matrix.ndim == 2
 
       signal = matrix.to_a
@@ -106,7 +112,8 @@ module Muze
     end
 
     def deemphasis(y, coef: 0.97)
-      matrix = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      validate_finite_number!(coef, "coef")
+      matrix = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       return apply_channels(matrix) { |channel| deemphasis(channel, coef:) } if matrix.ndim == 2
 
       signal = matrix.to_a
@@ -329,5 +336,33 @@ module Muze
       signal / peak
     end
     private_class_method :normalize_peak
+
+    def validate_positive_integer!(value, label)
+      return if value.is_a?(Integer) && value.positive?
+
+      raise Muze::ParameterError, "#{label} must be a positive integer"
+    end
+    private_class_method :validate_positive_integer!
+
+    def validate_optional_positive_integer!(value, label)
+      return if value.nil?
+
+      validate_positive_integer!(value, label)
+    end
+    private_class_method :validate_optional_positive_integer!
+
+    def validate_positive_number!(value, label)
+      return if value.respond_to?(:finite?) && value.finite? && value.positive?
+
+      raise Muze::ParameterError, "#{label} must be positive"
+    end
+    private_class_method :validate_positive_number!
+
+    def validate_finite_number!(value, label)
+      return if value.respond_to?(:finite?) && value.finite?
+
+      raise Muze::ParameterError, "#{label} must be finite"
+    end
+    private_class_method :validate_finite_number!
   end
 end

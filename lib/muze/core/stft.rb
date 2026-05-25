@@ -56,10 +56,12 @@ module Muze
       # @param length [Integer, nil]
       # @return [Numo::SFloat]
       def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat, periodic: false)
+        stft_matrix = cast_complex_matrix(stft_matrix, "stft_matrix")
         frequency_bins, frame_count = stft_matrix.shape
         n_fft = (frequency_bins - 1) * 2
         win_length ||= n_fft
         validate_stft_params!(n_fft:, hop_length:, win_length:)
+        raise Muze::ParameterError, "length must be non-negative" if length && (!length.is_a?(Integer) || length.negative?)
 
         signal_length = n_fft + (hop_length * [frame_count - 1, 0].max)
         output = Array.new(signal_length, 0.0)
@@ -101,8 +103,11 @@ module Muze
       # @param dtype [Class, Symbol]
       # @return [Array<Numo::SFloat, Numo::DComplex>]
       def magphase(stft_matrix, eps: EPSILON, dtype: Numo::SFloat)
-        raise Muze::ParameterError, "eps must be positive" unless eps.positive?
+        unless eps.respond_to?(:positive?) && eps.respond_to?(:finite?) && eps.positive? && eps.finite?
+          raise Muze::ParameterError, "eps must be positive"
+        end
 
+        stft_matrix = cast_complex_matrix(stft_matrix, "stft_matrix")
         magnitude = stft_matrix.abs.cast_to(dtype_class(dtype))
         phase = stft_matrix / (magnitude + eps)
         [magnitude, phase]
@@ -146,6 +151,7 @@ module Muze
       # @param ref [Float]
       # @return [Numo::SFloat]
       def db_to_amplitude(s_db, ref: 1.0)
+        validate_db_inverse_args!(s_db, ref)
         Numo::SFloat.cast(ref.to_f * Numo::NMath.exp((Numo::SFloat.cast(s_db) / 20.0) * Math.log(10.0)))
       end
 
@@ -153,6 +159,7 @@ module Muze
       # @param ref [Float]
       # @return [Numo::SFloat]
       def db_to_power(s_db, ref: 1.0)
+        validate_db_inverse_args!(s_db, ref)
         Numo::SFloat.cast(ref.to_f * Numo::NMath.exp((Numo::SFloat.cast(s_db) / 10.0) * Math.log(10.0)))
       end
 
@@ -160,8 +167,8 @@ module Muze
       # @param n_fft [Integer]
       # @return [Numo::SFloat]
       def fft_frequencies(sr:, n_fft:)
-        raise Muze::ParameterError, "sr must be positive" unless sr.positive?
-        raise Muze::ParameterError, "n_fft must be positive" unless n_fft.positive?
+        raise Muze::ParameterError, "sr must be a positive integer" unless sr.is_a?(Integer) && sr.positive?
+        raise Muze::ParameterError, "n_fft must be a positive integer" unless n_fft.is_a?(Integer) && n_fft.positive?
 
         key = [sr, n_fft]
         (FREQUENCY_CACHE[key] ||= Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft })).dup
@@ -242,6 +249,9 @@ module Muze
       private_class_method :reference_value
 
       def validate_stft_params!(n_fft:, hop_length:, win_length:)
+        raise Muze::ParameterError, "n_fft must be an integer" unless n_fft.is_a?(Integer)
+        raise Muze::ParameterError, "hop_length must be an integer" unless hop_length.is_a?(Integer)
+        raise Muze::ParameterError, "win_length must be an integer" unless win_length.is_a?(Integer)
         raise Muze::ParameterError, "n_fft must be positive" if n_fft <= 0
         raise Muze::ParameterError, "n_fft must be <= #{MAX_N_FFT}" if n_fft > MAX_N_FFT
         raise Muze::ParameterError, "n_fft must be even" unless n_fft.even?
@@ -262,10 +272,36 @@ module Muze
         raise Muze::ParameterError, "y must not be nil" if y.nil?
 
         signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+        if signal.first.is_a?(Array)
+          raise Muze::ParameterError, "stft expects mono audio; process channels separately or downmix first"
+        end
         validate_finite_array!(signal, "y")
         signal
       end
       private_class_method :signal_to_a
+
+      def cast_complex_matrix(value, label)
+        matrix = Numo::DComplex.cast(value)
+        raise Muze::ParameterError, "#{label} must be two-dimensional" unless matrix.ndim == 2
+        raise Muze::ParameterError, "#{label} must have at least two frequency bins" if matrix.shape[0] < 2
+        validate_finite_array!(matrix.real.to_a.flatten, label)
+        validate_finite_array!(matrix.imag.to_a.flatten, label)
+        matrix
+      rescue NoMethodError, TypeError, ArgumentError => e
+        raise Muze::ParameterError, "#{label} must be a complex STFT matrix: #{e.message}"
+      end
+      private_class_method :cast_complex_matrix
+
+      def validate_db_inverse_args!(values, ref)
+        unless ref.respond_to?(:positive?) && ref.respond_to?(:finite?) && ref.positive? && ref.finite?
+          raise Muze::ParameterError, "ref must be positive and finite"
+        end
+
+        validate_finite_values!(Numo::SFloat.cast(values), "input")
+      rescue NoMethodError, TypeError, ArgumentError => e
+        raise Muze::ParameterError, "input must contain numeric dB values: #{e.message}"
+      end
+      private_class_method :validate_db_inverse_args!
 
       def pad_signal(signal, pad, mode)
         return signal if pad <= 0

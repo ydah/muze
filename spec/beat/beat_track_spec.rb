@@ -80,6 +80,16 @@ RSpec.describe Muze::Beat do
       expect(tempo).to be_nil
       expect(beats).to eq([])
     end
+
+    it "validates beat tracking controls and envelopes" do
+      expect do
+        described_class.beat_track(onset_envelope: [0.0, Float::NAN], sr:, hop_length:)
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.beat_track(onset_envelope: [0.0, 1.0], sr:, hop_length:, min_bpm: 120.0, max_bpm: 60.0)
+      end.to raise_error(Muze::ParameterError, /max_bpm/)
+    end
   end
 
   describe ".tempo_frequencies" do
@@ -96,6 +106,12 @@ RSpec.describe Muze::Beat do
 
       expect(tempo.max).to be <= 1.0
       expect(tempo[2, 4]).to be_within(1.0e-6).of(1.0)
+    end
+
+    it "validates tempogram controls" do
+      expect do
+        described_class.tempogram(onset_envelope: [1.0], win_length: 0)
+      end.to raise_error(Muze::ParameterError, /win_length/)
     end
   end
 end

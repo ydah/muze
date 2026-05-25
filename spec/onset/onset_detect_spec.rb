@@ -29,6 +29,20 @@ RSpec.describe Muze::Onset do
 
       expect(envelope.max).to be <= 1.0
     end
+
+    it "validates onset strength inputs" do
+      expect do
+        described_class.onset_strength(s: Numo::SFloat[[Float::NAN]], sr:, hop_length:)
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.onset_strength(y: click_signal, sr:, hop_length:, lag: 0)
+      end.to raise_error(Muze::ParameterError, /lag/)
+
+      expect do
+        described_class.onset_strength(y: click_signal, sr:, hop_length:, log: :yes)
+      end.to raise_error(Muze::ParameterError, /log/)
+    end
   end
 
   describe ".onset_detect" do
@@ -61,6 +75,16 @@ RSpec.describe Muze::Onset do
       onsets = described_class.onset_detect(onset_envelope:, hop_length:, adaptive: true, delta: 0.1, wait: 2)
 
       expect(onsets).not_to be_empty
+    end
+
+    it "validates onset detection controls" do
+      expect do
+        described_class.onset_detect(onset_envelope: [0.0, Float::INFINITY, 0.0], hop_length:)
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.onset_detect(onset_envelope: [0.0, 1.0, 0.0], hop_length:, pre_max: -1)
+      end.to raise_error(Muze::ParameterError, /pre_max/)
     end
   end
 end

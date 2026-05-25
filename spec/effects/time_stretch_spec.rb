@@ -67,6 +67,16 @@ RSpec.describe Muze::Effects do
       end.to raise_error(Muze::ParameterError, /rate/)
     end
 
+    it "rejects invalid audio and analysis parameters" do
+      expect do
+        described_class.time_stretch([0.0, Float::INFINITY], rate: 1.2)
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.time_stretch(signal, rate: 1.2, n_fft: 0)
+      end.to raise_error(Muze::ParameterError, /n_fft/)
+    end
+
     it "processes multi-channel input" do
       stereo = Numo::SFloat.zeros(signal.size, 2)
       stereo[true, 0] = signal
@@ -108,6 +118,16 @@ RSpec.describe Muze::Effects do
       shifted = described_class.pitch_shift(signal * 0.25, sr:, n_steps: 1, normalize: true, clip: 0.5)
 
       expect(shifted.abs.max).to be <= 0.5
+    end
+
+    it "validates pitch-shift controls" do
+      expect do
+        described_class.pitch_shift(signal, sr: 0, n_steps: 1)
+      end.to raise_error(Muze::ParameterError, /sr/)
+
+      expect do
+        described_class.pitch_shift(signal, sr:, n_steps: Float::NAN)
+      end.to raise_error(Muze::ParameterError, /n_steps/)
     end
 
     it "uses the provided sample rate for the restoration resample" do
@@ -174,6 +194,12 @@ RSpec.describe Muze::Effects do
       restored = described_class.deemphasis(described_class.preemphasis(stereo))
 
       expect((restored - stereo).abs.max).to be < 1.0e-4
+    end
+
+    it "rejects non-finite coefficients" do
+      expect do
+        described_class.preemphasis(signal, coef: Float::NAN)
+      end.to raise_error(Muze::ParameterError, /coef/)
     end
   end
 

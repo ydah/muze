@@ -31,5 +31,11 @@ RSpec.describe Muze::Core::Resample do
       expect(result.size).to eq(80)
       expect(result.to_a.all?(&:finite?)).to be(true)
     end
+
+    it "rejects non-finite audio input" do
+      expect do
+        described_class.resample([0.0, Float::NAN], orig_sr: 100, target_sr: 50)
+      end.to raise_error(Muze::ParameterError, /finite/)
+    end
   end
 end

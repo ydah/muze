@@ -34,6 +34,7 @@ module Muze
     def tonnetz(y: nil, chroma: nil, sr: 22_050, n_fft: 2048, hop_length: 512)
       chroma_matrix = chroma ? Numo::SFloat.cast(chroma) : chroma_stft(y:, sr:, n_fft:, hop_length:)
       chroma_matrix = chroma_matrix.expand_dims(1) if chroma_matrix.ndim == 1
+      validate_spectrum!(chroma_matrix)
       raise Muze::ParameterError, "tonnetz requires 12-bin chroma" unless chroma_matrix.shape[0] == 12
 
       frames = chroma_matrix.shape[1]

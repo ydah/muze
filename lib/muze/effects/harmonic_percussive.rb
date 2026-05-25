@@ -13,7 +13,9 @@ module Muze
     # @return [Array(Numo::SFloat, Numo::SFloat)] harmonic and percussive waveforms
     def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512, return_masks: false)
       validate_hpss_params!(kernel_size:, power:, margin:)
-      signal = Numo::SFloat.cast(y)
+      raise Muze::ParameterError, "return_masks must be true or false" unless [true, false].include?(return_masks)
+
+      signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       return hpss_channels(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:) if signal.ndim == 2
 
       hpss_mono(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)

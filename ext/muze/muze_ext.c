@@ -1,4 +1,5 @@
 #include "ruby.h"
+#include "ruby/thread.h"
 
 static VALUE mMuze;
 static VALUE mNative;
@@ -95,6 +96,19 @@ static double quickselect_double(double *values, long count, long target) {
   }
 }
 
+struct median_args {
+  double *values;
+  long count;
+  long target;
+  double result;
+};
+
+static void *median_without_gvl(void *ptr) {
+  struct median_args *args = (struct median_args *)ptr;
+  args->result = quickselect_double(args->values, args->count, args->target);
+  return NULL;
+}
+
 static VALUE native_median1d(VALUE self, VALUE rb_values) {
   if (!RB_TYPE_P(rb_values, T_ARRAY)) {
     rb_raise(muze_parameter_error(), "values must be an Array");
@@ -109,9 +123,10 @@ static VALUE native_median1d(VALUE self, VALUE rb_values) {
     values[i] = NUM2DBL(rb_ary_entry(rb_values, i));
   }
 
-  const double median = quickselect_double(values, count, count / 2);
+  struct median_args args = { values, count, count / 2, 0.0 };
+  rb_thread_call_without_gvl(median_without_gvl, &args, NULL, NULL);
   xfree(values);
-  return DBL2NUM(median);
+  return DBL2NUM(args.result);
 }
 
 void Init_muze_ext(void) {

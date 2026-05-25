@@ -72,9 +72,12 @@ module Muze
     # @param output [String, nil]
     # @return [String] SVG content
     def waveshow(y, sr: 22_050, output: nil, width: 800, height: 240, normalize: true, channels: :overlay)
-      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      raise Muze::ParameterError, "width and height must be positive" unless width.positive? && height.positive?
+      raise Muze::ParameterError, "sr must be positive" unless sr.positive?
+      raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
       raise Muze::ParameterError, "channels must be :overlay or :split" unless %i[overlay split].include?(channels)
 
+      signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true).to_a
       channel_data = signal.first.is_a?(Array) ? transpose_channels(signal) : [signal]
       channel_data = channel_data.map { |channel| normalize ? normalize_wave(channel) : channel }
       width = width.to_f
@@ -102,6 +105,7 @@ module Muze
     def onsetshow(onset_envelope, sr: 22_050, hop_length: 512, output: nil, width: 800, height: 160, normalize: true)
       raise Muze::ParameterError, "width and height must be positive" unless width.positive? && height.positive?
       raise Muze::ParameterError, "sr and hop_length must be positive" unless sr.positive? && hop_length.positive?
+      raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
 
       envelope = Numo::SFloat.cast(onset_envelope).to_a.flatten
       raise Muze::ParameterError, "onset envelope must contain only finite values" unless envelope.all? { |value| value.respond_to?(:finite?) && value.finite? }

@@ -13,11 +13,24 @@ module Muze
     # @param tightness [Integer]
     # @return [Array(Float, Array<Integer>)] estimated tempo and beat frames
     def beat_track(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, start_bpm: 120.0, tightness: 100, min_bpm: 30.0, max_bpm: 240.0, bpm: nil, fill_missing: true, return_metadata: false)
+      validate_beat_params!(
+        sr:,
+        hop_length:,
+        start_bpm:,
+        tightness:,
+        min_bpm:,
+        max_bpm:,
+        bpm:,
+        fill_missing:,
+        return_metadata:
+      )
+
       envelope = if onset_envelope
                    onset_envelope.is_a?(Numo::NArray) ? onset_envelope.to_a : Array(onset_envelope)
                  else
                    Muze::Onset.onset_strength(y:, sr:, hop_length:).to_a
                  end
+      validate_finite_array!(envelope, "onset_envelope")
 
       if envelope.empty? || envelope.max.to_f <= 1.0e-12
         result = { tempo: nil, beats: [], confidence: 0.0 }
@@ -39,10 +52,14 @@ module Muze
     # @param win_length [Integer]
     # @return [Numo::SFloat]
     def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384, normalize: false)
+      validate_positive_integer!(sr, "sr")
+      validate_positive_integer!(hop_length, "hop_length")
       Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:, normalize:)
     end
 
     def tempo_frequencies(sr: 22_050, hop_length: 512, win_length: 384)
+      validate_positive_integer!(sr, "sr")
+      validate_positive_integer!(hop_length, "hop_length")
       raise Muze::ParameterError, "win_length must be positive" unless win_length.positive?
 
       Numo::SFloat.cast(Array.new(win_length) do |lag|
@@ -133,5 +150,40 @@ module Muze
       [value / 100.0, 4.0].min / 4.0
     end
     private_class_method :normalized_tightness
+
+    def validate_beat_params!(sr:, hop_length:, start_bpm:, tightness:, min_bpm:, max_bpm:, bpm:, fill_missing:, return_metadata:)
+      validate_positive_integer!(sr, "sr")
+      validate_positive_integer!(hop_length, "hop_length")
+      validate_positive_number!(start_bpm, "start_bpm")
+      raise Muze::ParameterError, "tightness must be finite" unless tightness.respond_to?(:finite?) && tightness.finite?
+      validate_positive_number!(min_bpm, "min_bpm")
+      validate_positive_number!(max_bpm, "max_bpm")
+      raise Muze::ParameterError, "max_bpm must be greater than min_bpm" unless max_bpm > min_bpm
+      validate_positive_number!(bpm, "bpm") if bpm
+      raise Muze::ParameterError, "fill_missing must be true or false" unless [true, false].include?(fill_missing)
+      raise Muze::ParameterError, "return_metadata must be true or false" unless [true, false].include?(return_metadata)
+    end
+    private_class_method :validate_beat_params!
+
+    def validate_positive_integer!(value, label)
+      return if value.is_a?(Integer) && value.positive?
+
+      raise Muze::ParameterError, "#{label} must be a positive integer"
+    end
+    private_class_method :validate_positive_integer!
+
+    def validate_positive_number!(value, label)
+      return if value.respond_to?(:finite?) && value.finite? && value.positive?
+
+      raise Muze::ParameterError, "#{label} must be positive"
+    end
+    private_class_method :validate_positive_number!
+
+    def validate_finite_array!(values, label)
+      return if values.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+      raise Muze::ParameterError, "#{label} must contain only finite numeric values"
+    end
+    private_class_method :validate_finite_array!
   end
 end

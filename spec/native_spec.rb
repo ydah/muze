@@ -11,6 +11,12 @@ RSpec.describe Muze::Native do
     it "returns zero for empty input" do
       expect(described_class.median1d([])).to eq(0.0)
     end
+
+    it "raises Muze::ParameterError for invalid input" do
+      expect do
+        described_class.median1d("bad")
+      end.to raise_error(Muze::ParameterError, /Array/)
+    end
   end
 
   describe ".frame_slices" do
@@ -19,6 +25,12 @@ RSpec.describe Muze::Native do
       shared = Muze::Core::Frames.slice([1, 2, 3, 4, 5], frame_length: 3, hop_length: 2)
 
       expect(native).to eq(shared)
+    end
+
+    it "raises Muze::ParameterError for invalid frame settings" do
+      expect do
+        described_class.frame_slices([1, 2, 3], 0, 1)
+      end.to raise_error(Muze::ParameterError, /positive/)
     end
   end
 end

@@ -27,6 +27,11 @@ module Muze
       # @param hop_length [Integer]
       # @return [Array<Array<Float>>]
       def frame_slices(signal, frame_length, hop_length)
+        raise Muze::ParameterError, "signal must be an Array" unless signal.is_a?(Array)
+        unless frame_length.is_a?(Integer) && hop_length.is_a?(Integer) && frame_length.positive? && hop_length.positive?
+          raise Muze::ParameterError, "frame_length and hop_length must be positive"
+        end
+
         if signal.length <= frame_length
           return [signal + Array.new(frame_length - signal.length, 0.0)]
         end
@@ -41,6 +46,7 @@ module Muze
       # @param values [Array<Float>]
       # @return [Float]
       def median1d(values)
+        raise Muze::ParameterError, "values must be an Array" unless values.is_a?(Array)
         return 0.0 if values.empty?
 
         copy = values.map(&:to_f)

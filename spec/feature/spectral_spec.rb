@@ -46,6 +46,16 @@ RSpec.describe Muze::Feature do
       expect(values.shape[1]).to be > 0
     end
 
+    it "rejects invalid time-domain feature input" do
+      expect do
+        described_class.rms(y: nil)
+      end.to raise_error(Muze::ParameterError, /audio/)
+
+      expect do
+        described_class.zero_crossing_rate([[0.0, 1.0], [0.5, 0.5]])
+      end.to raise_error(Muze::ParameterError, /mono/)
+    end
+
     it "validates spectral parameters" do
       expect { described_class.spectral_rolloff(y: sine(440.0), roll_percent: 1.0) }.to raise_error(Muze::ParameterError)
       expect { described_class.spectral_bandwidth(y: sine(440.0), p: 0) }.to raise_error(Muze::ParameterError)

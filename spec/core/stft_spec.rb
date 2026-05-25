@@ -37,6 +37,12 @@ RSpec.describe Muze::Core::STFT do
       end.to raise_error(Muze::ParameterError, /pad_mode/)
     end
 
+    it "rejects multi-channel input with a clear error" do
+      expect do
+        Muze.stft([[0.0, 1.0], [0.5, 0.5]], n_fft: 4, hop_length: 2)
+      end.to raise_error(Muze::ParameterError, /mono/)
+    end
+
     it "supports even non-power-of-two FFT lengths" do
       result = Muze.stft(signal, n_fft: 300, hop_length: 75, center: false)
 
@@ -74,11 +80,24 @@ RSpec.describe Muze::Core::STFT do
       expect(reconstructed).to be_a(Numo::DFloat)
     end
 
+    it "rejects invalid STFT matrices" do
+      expect do
+        Muze.istft(Numo::DComplex[Complex(Float::NAN, 0.0)])
+      end.to raise_error(Muze::ParameterError, /two-dimensional|complex STFT/)
+    end
+
     it "uses matching periodic windows for reconstruction" do
       spectrum = Muze.stft(signal, n_fft: 256, hop_length: 64, center: true, periodic: true)
       reconstructed = Muze.istft(spectrum, hop_length: 64, center: true, length: signal.size, periodic: true)
 
       expect((reconstructed - signal).abs.max).to be < 0.05
+    end
+
+    it "reconstructs non-power-of-two FFT lengths when the trailing frame is padded" do
+      spectrum = Muze.stft(signal, n_fft: 300, hop_length: 75, center: true, pad_end: true)
+      reconstructed = Muze.istft(spectrum, hop_length: 75, center: true, length: signal.size)
+
+      expect((reconstructed - signal).abs.max).to be < 1.0e-4
     end
   end
 
@@ -89,6 +108,12 @@ RSpec.describe Muze::Core::STFT do
 
       expect(magnitude).to be_a(Numo::DFloat)
       expect(phase.shape).to eq(spectrum.shape)
+    end
+
+    it "rejects invalid epsilon" do
+      expect do
+        Muze.magphase(Muze.stft(signal, n_fft: 256, hop_length: 64), eps: 0.0)
+      end.to raise_error(Muze::ParameterError, /eps/)
     end
   end
 
@@ -121,6 +146,12 @@ RSpec.describe Muze::Core::STFT do
       expect(error).to be < 1.0e-4
     end
 
+    it "validates inverse dB references" do
+      expect do
+        Muze.db_to_amplitude([0.0], ref: 0.0)
+      end.to raise_error(Muze::ParameterError, /ref/)
+    end
+
     it "rejects negative amplitudes unless abs is requested" do
       expect do
         Muze.amplitude_to_db(Numo::SFloat[-1.0])
@@ -148,6 +179,12 @@ RSpec.describe Muze::Core::STFT do
 
     it "returns FFT frequency bins" do
       expect(Muze.fft_frequencies(sr: 8_000, n_fft: 8).to_a).to eq([0.0, 1000.0, 2000.0, 3000.0, 4000.0])
+    end
+
+    it "validates FFT frequency parameters" do
+      expect do
+        Muze.fft_frequencies(sr: 8_000.0, n_fft: 8)
+      end.to raise_error(Muze::ParameterError, /sr/)
     end
   end
 
