@@ -64,5 +64,40 @@ RSpec.describe Muze::Feature do
 
       expect(descriptors.all? { |descriptor| descriptor.shape[0] == 1 && descriptor.shape[1].positive? }).to be(true)
     end
+
+    it "accepts power spectrogram input explicitly" do
+      magnitude, = Muze.magphase(Muze.stft(sine(440.0), n_fft: 1024, hop_length: 256))
+      power = magnitude**2
+      centroid = described_class.spectral_centroid(s: power, s_kind: :power, sr:, n_fft: 1024, hop_length: 256)
+
+      expect(centroid.shape[0]).to eq(1)
+      expect(centroid.shape[1]).to eq(power.shape[1])
+    end
+
+    it "computes spectral polynomial features" do
+      features = described_class.poly_features(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256, order: 2)
+
+      expect(features.shape[0]).to eq(3)
+      expect(features.shape[1]).to be > 0
+    end
+
+    it "rejects NaN and negative power spectrogram input" do
+      expect do
+        described_class.spectral_centroid(s: Numo::SFloat[Float::NAN], sr:, n_fft: 0)
+      end.to raise_error(Muze::ParameterError, /finite/)
+
+      expect do
+        described_class.spectral_centroid(s: Numo::SFloat[-1.0], s_kind: :power, sr:, n_fft: 0)
+      end.to raise_error(Muze::ParameterError, /non-negative/)
+    end
+  end
+
+  describe ".context" do
+    it "extracts multiple features through a shared context" do
+      result = described_class.extract(y: sine(440.0), sr:, features: %i[melspectrogram chroma_stft spectral_centroid tonnetz], n_fft: 1024, hop_length: 256)
+
+      expect(result.keys).to contain_exactly(:melspectrogram, :chroma_stft, :spectral_centroid, :tonnetz)
+      expect(result.fetch(:tonnetz).shape[0]).to eq(6)
+    end
   end
 end

@@ -59,6 +59,33 @@ RSpec.describe Muze::Core::STFT do
       error = (reconstructed - signal).abs.max
       expect(error).to be < 0.05
     end
+
+    it "can return float64 output" do
+      spectrum = Muze.stft(signal, n_fft: 256, hop_length: 64, center: true)
+      reconstructed = Muze.istft(spectrum, hop_length: 64, center: true, length: signal.size, dtype: :dfloat)
+
+      expect(reconstructed).to be_a(Numo::DFloat)
+    end
+  end
+
+  describe ".magphase" do
+    it "supports custom epsilon and dtype" do
+      spectrum = Muze.stft(signal, n_fft: 256, hop_length: 64, center: true)
+      magnitude, phase = Muze.magphase(spectrum, eps: 1.0e-9, dtype: :dfloat)
+
+      expect(magnitude).to be_a(Numo::DFloat)
+      expect(phase.shape).to eq(spectrum.shape)
+    end
+  end
+
+  describe ".stft_stream" do
+    it "returns one STFT matrix per chunk" do
+      chunks = [signal[0...1024], signal[1024...2048]]
+      matrices = Muze.stft_stream(chunks, n_fft: 256, hop_length: 128)
+
+      expect(matrices.length).to eq(2)
+      expect(matrices.all? { |matrix| matrix.shape[0] == 129 }).to be(true)
+    end
   end
 
   describe "dB conversion" do

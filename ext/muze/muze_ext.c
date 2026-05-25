@@ -53,12 +53,46 @@ static VALUE native_frame_slices(VALUE self, VALUE rb_signal, VALUE rb_frame_len
   return frames;
 }
 
-static int cmp_double(const void *a, const void *b) {
-  const double left = *(const double *)a;
-  const double right = *(const double *)b;
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
+static void swap_double(double *values, long left, long right) {
+  const double tmp = values[left];
+  values[left] = values[right];
+  values[right] = tmp;
+}
+
+static long partition_double(double *values, long left, long right, long pivot_index) {
+  const double pivot = values[pivot_index];
+  long store_index = left;
+
+  swap_double(values, pivot_index, right);
+
+  for (long i = left; i < right; i++) {
+    if (values[i] < pivot) {
+      swap_double(values, store_index, i);
+      store_index++;
+    }
+  }
+
+  swap_double(values, right, store_index);
+  return store_index;
+}
+
+static double quickselect_double(double *values, long count, long target) {
+  long left = 0;
+  long right = count - 1;
+
+  while (1) {
+    if (left == right) return values[left];
+
+    const long pivot_index = partition_double(values, left, right, left + ((right - left) / 2));
+
+    if (target == pivot_index) {
+      return values[target];
+    } else if (target < pivot_index) {
+      right = pivot_index - 1;
+    } else {
+      left = pivot_index + 1;
+    }
+  }
 }
 
 static VALUE native_median1d(VALUE self, VALUE rb_values) {
@@ -75,8 +109,7 @@ static VALUE native_median1d(VALUE self, VALUE rb_values) {
     values[i] = NUM2DBL(rb_ary_entry(rb_values, i));
   }
 
-  qsort(values, count, sizeof(double), cmp_double);
-  const double median = values[count / 2];
+  const double median = quickselect_double(values, count, count / 2);
   xfree(values);
   return DBL2NUM(median);
 }

@@ -10,8 +10,8 @@ module Muze
     # @param n_fft [Integer]
     # @param hop_length [Integer]
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_centroid(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_centroid(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -38,11 +38,11 @@ module Muze
     # @param hop_length [Integer]
     # @param p [Integer]
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_bandwidth(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, p: 2, center: true, pad_mode: :reflect)
+    def spectral_bandwidth(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, p: 2, center: true, pad_mode: :reflect, s_kind: :magnitude)
       raise Muze::ParameterError, "p must be positive" unless p.positive?
 
-      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
-      centroids = spectral_centroid(y:, s: magnitude, sr:, n_fft:, hop_length:, center:, pad_mode:)
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
+      centroids = spectral_centroid(y:, s: magnitude, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind: :magnitude)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -73,10 +73,10 @@ module Muze
     # @param hop_length [Integer]
     # @param roll_percent [Float]
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_rolloff(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, roll_percent: 0.85, center: true, pad_mode: :reflect)
+    def spectral_rolloff(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, roll_percent: 0.85, center: true, pad_mode: :reflect, s_kind: :magnitude)
       raise Muze::ParameterError, "roll_percent must satisfy 0 < roll_percent < 1" unless roll_percent.positive? && roll_percent < 1.0
 
-      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -104,10 +104,10 @@ module Muze
     # @param s [Numo::SFloat, nil]
     # @param amin [Float]
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_flatness(y: nil, s: nil, n_fft: 2048, hop_length: 512, amin: 1.0e-10, center: true, pad_mode: :reflect)
+    def spectral_flatness(y: nil, s: nil, n_fft: 2048, hop_length: 512, amin: 1.0e-10, center: true, pad_mode: :reflect, s_kind: :magnitude)
       raise Muze::ParameterError, "amin must be positive" unless amin.positive?
 
-      magnitude, = prepare_magnitude(y:, s:, sr: 22_050, n_fft:, hop_length:, center:, pad_mode:)
+      magnitude, = prepare_magnitude(y:, s:, sr: 22_050, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -126,12 +126,12 @@ module Muze
     # @param n_bands [Integer]
     # @param quantile [Float]
     # @return [Numo::SFloat] shape: [n_bands + 1, frames]
-    def spectral_contrast(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, n_bands: 6, quantile: 0.02, fmin: 200.0, center: true, pad_mode: :reflect)
+    def spectral_contrast(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, n_bands: 6, quantile: 0.02, fmin: 200.0, center: true, pad_mode: :reflect, s_kind: :magnitude)
       raise Muze::ParameterError, "n_bands must be positive" unless n_bands.positive?
       raise Muze::ParameterError, "quantile must satisfy 0 < quantile < 0.5" unless quantile.positive? && quantile < 0.5
       raise Muze::ParameterError, "fmin must be positive" unless fmin.positive?
 
-      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       bins, frames = magnitude.shape
       edges = spectral_contrast_edges(frequencies, n_bands:, fmin:, sr:)
       output = Numo::SFloat.zeros(n_bands + 1, frames)
@@ -170,8 +170,8 @@ module Muze
     end
 
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_flux(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_flux(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -183,8 +183,8 @@ module Muze
     end
 
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_entropy(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_entropy(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -201,8 +201,8 @@ module Muze
     end
 
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_crest(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_crest(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       _, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -215,8 +215,8 @@ module Muze
     end
 
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_slope(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_slope(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       mean_frequency = frequencies.sum / frequencies.length.to_f
       frequency_variance = frequencies.sum { |frequency| (frequency - mean_frequency)**2 }
       _, frames = magnitude.shape
@@ -232,8 +232,8 @@ module Muze
     end
 
     # @return [Numo::SFloat] shape: [1, frames]
-    def spectral_decrease(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
-      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    def spectral_decrease(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      magnitude, = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
       bins, frames = magnitude.shape
       output = Numo::SFloat.zeros(1, frames)
 
@@ -251,6 +251,25 @@ module Muze
       output
     end
 
+    # @return [Numo::SFloat] shape: [order + 1, frames]
+    def poly_features(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, order: 1, frequency: nil, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      raise Muze::ParameterError, "order must be >= 0" unless order.is_a?(Integer) && order >= 0
+
+      magnitude, frequencies = prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:, s_kind:)
+      bins, frames = magnitude.shape
+      x_values = frequency ? Numo::SFloat.cast(frequency).to_a.flatten : frequencies
+      raise Muze::ParameterError, "frequency length must match spectrum bins" unless x_values.length == bins
+
+      x_values = normalize_frequency_axis(x_values)
+      output = Numo::SFloat.zeros(order + 1, frames)
+      frames.times do |frame_index|
+        coefficients = polynomial_coefficients(x_values, magnitude[true, frame_index].to_a, order)
+        coefficients.each_with_index { |value, index| output[index, frame_index] = value }
+      end
+
+      output
+    end
+
     # @param y [Numo::SFloat, Array<Float>]
     # @param frame_length [Integer]
     # @param hop_length [Integer]
@@ -259,8 +278,9 @@ module Muze
       raise Muze::ParameterError, "threshold must be >= 0" if threshold.negative?
 
       signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      validate_finite_array!(signal, "y")
       signal = Array.new(frame_length / 2, 0.0) + signal + Array.new(frame_length / 2, 0.0) if center
-      frames = frame_signal(signal, frame_length, hop_length)
+      frames = Muze::Core::Frames.slice(signal, frame_length:, hop_length:)
       values = frames.map do |frame|
         crossings = 0
         signs = frame.map { |value| value.abs <= threshold ? 0.0 : value }
@@ -279,6 +299,7 @@ module Muze
     def rms(y: nil, s: nil, frame_length: 2048, hop_length: 512, center: false)
       if s
         matrix = Numo::SFloat.cast(s)
+        validate_finite_array!(matrix.to_a.flatten, "s")
         matrix = matrix.expand_dims(1) if matrix.ndim == 1
         _, frames = matrix.shape
         values = Array.new(frames) do |frame_index|
@@ -290,8 +311,9 @@ module Muze
       end
 
       signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      validate_finite_array!(signal, "y")
       signal = Array.new(frame_length / 2, 0.0) + signal + Array.new(frame_length / 2, 0.0) if center
-      frames = frame_signal(signal, frame_length, hop_length)
+      frames = Muze::Core::Frames.slice(signal, frame_length:, hop_length:)
       values = frames.map do |frame|
         Math.sqrt(frame.sum { |value| value * value } / frame.length)
       end
@@ -332,9 +354,19 @@ module Muze
       tempogram
     end
 
-    def prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center: true, pad_mode: :reflect)
+    def prepare_magnitude(y:, s:, sr:, n_fft:, hop_length:, center: true, pad_mode: :reflect, s_kind: :magnitude)
+      raise Muze::ParameterError, "s_kind must be :magnitude or :power" unless %i[magnitude power].include?(s_kind)
+
       spectrum = if s
-                   Numo::SFloat.cast(s)
+                   provided = Numo::SFloat.cast(s)
+                   validate_finite_array!(provided.to_a.flatten, "s")
+                   if s_kind == :power
+                     raise Muze::ParameterError, "power spectrogram must be non-negative" if provided.to_a.flatten.any?(&:negative?)
+
+                     Numo::NMath.sqrt(provided).cast_to(Numo::SFloat)
+                   else
+                     provided
+                   end
                  else
                    stft_matrix = Muze.stft(y, n_fft:, hop_length:, center:, pad_mode:)
                    magnitude, = Muze.magphase(stft_matrix)
@@ -342,23 +374,13 @@ module Muze
                  end
 
       spectrum = spectrum.expand_dims(1) if spectrum.ndim == 1
+      validate_finite_array!(spectrum.to_a.flatten, "spectrum")
       bins, = spectrum.shape
       fft_size = n_fft || ((bins - 1) * 2)
       frequencies = Muze.fft_frequencies(sr:, n_fft: fft_size).to_a[0...bins]
       [spectrum, frequencies]
     end
     private_class_method :prepare_magnitude
-
-    def frame_signal(signal, frame_length, hop_length)
-      return [signal + Array.new(frame_length - signal.length, 0.0)] if signal.length <= frame_length
-
-      frame_count = ((signal.length - frame_length) / hop_length) + 1
-      Array.new(frame_count) do |index|
-        start = index * hop_length
-        signal[start, frame_length]
-      end
-    end
-    private_class_method :frame_signal
 
     def onset_env_from_signal(y, sr:, hop_length:)
       mel_spec = melspectrogram(y:, sr:, n_fft: 1024, hop_length:, n_mels: 40)
@@ -373,5 +395,65 @@ module Muze
       onset
     end
     private_class_method :onset_env_from_signal
+
+    def normalize_frequency_axis(values)
+      min = values.min
+      max = values.max
+      return Array.new(values.length, 0.0) if (max - min).abs <= 1.0e-12
+
+      values.map { |value| (2.0 * (value - min) / (max - min)) - 1.0 }
+    end
+    private_class_method :normalize_frequency_axis
+
+    def polynomial_coefficients(x_values, y_values, order)
+      size = order + 1
+      normal = Array.new(size) { Array.new(size, 0.0) }
+      rhs = Array.new(size, 0.0)
+
+      x_values.each_with_index do |x_value, index|
+        powers = Array.new((2 * order) + 1, 1.0)
+        (1...powers.length).each { |power| powers[power] = powers[power - 1] * x_value }
+        size.times do |row|
+          rhs[row] += y_values[index] * powers[row]
+          size.times { |col| normal[row][col] += powers[row + col] }
+        end
+      end
+
+      solve_linear_system(normal, rhs)
+    end
+    private_class_method :polynomial_coefficients
+
+    def solve_linear_system(matrix, rhs)
+      size = rhs.length
+      size.times do |pivot|
+        best = (pivot...size).max_by { |row| matrix[row][pivot].abs }
+        return Array.new(size, 0.0) if matrix[best][pivot].abs <= 1.0e-12
+
+        matrix[pivot], matrix[best] = matrix[best], matrix[pivot]
+        rhs[pivot], rhs[best] = rhs[best], rhs[pivot]
+
+        divisor = matrix[pivot][pivot]
+        pivot.upto(size - 1) { |col| matrix[pivot][col] /= divisor }
+        rhs[pivot] /= divisor
+
+        size.times do |row|
+          next if row == pivot
+
+          factor = matrix[row][pivot]
+          pivot.upto(size - 1) { |col| matrix[row][col] -= factor * matrix[pivot][col] }
+          rhs[row] -= factor * rhs[pivot]
+        end
+      end
+
+      rhs
+    end
+    private_class_method :solve_linear_system
+
+    def validate_finite_array!(values, label)
+      return if values.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+      raise Muze::ParameterError, "#{label} must contain only finite numeric values"
+    end
+    private_class_method :validate_finite_array!
   end
 end

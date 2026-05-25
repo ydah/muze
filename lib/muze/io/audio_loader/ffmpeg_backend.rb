@@ -123,7 +123,7 @@ module Muze
         # @param duration [Float, nil]
         # @return [Array<Float>, Array<Array<Float>>]
         def decode_samples(path, channels, offset:, duration:)
-          raw_samples, stderr, status = capture_with_timeout(
+          raw_samples, stderr, status = capture_binary_with_timeout(
             "ffmpeg",
             "-v", "error",
             "-nostdin",
@@ -169,6 +169,33 @@ module Muze
           raise Muze::AudioLoadError, "#{command.first} timed out after #{DEFAULT_TIMEOUT_SECONDS}s"
         end
         private_class_method :capture_with_timeout
+
+        def capture_binary_with_timeout(*command)
+          stdout_data = +""
+          stderr_data = +""
+          status = nil
+          Timeout.timeout(DEFAULT_TIMEOUT_SECONDS) do
+            Open3.popen3(*command) do |stdin, stdout, stderr, wait_thread|
+              stdin.close
+              stdout.binmode
+              reader = Thread.new do
+                until stdout.eof?
+                  stdout_data << stdout.readpartial(16 * 1024)
+                end
+              rescue EOFError
+                nil
+              end
+              stderr_reader = Thread.new { stderr_data << stderr.read.to_s }
+              reader.join
+              stderr_reader.join
+              status = wait_thread.value
+            end
+          end
+          [stdout_data, stderr_data, status]
+        rescue Timeout::Error
+          raise Muze::AudioLoadError, "#{command.first} timed out after #{DEFAULT_TIMEOUT_SECONDS}s"
+        end
+        private_class_method :capture_binary_with_timeout
 
         # @param command [String]
         # @return [Boolean]

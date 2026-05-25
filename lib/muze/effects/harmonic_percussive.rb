@@ -13,8 +13,16 @@ module Muze
     # @return [Array(Numo::SFloat, Numo::SFloat)] harmonic and percussive waveforms
     def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512, return_masks: false)
       validate_hpss_params!(kernel_size:, power:, margin:)
+      signal = Numo::SFloat.cast(y)
+      return hpss_channels(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:) if signal.ndim == 2
 
-      stft_matrix = Muze.stft(y, n_fft:, hop_length:)
+      hpss_mono(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)
+    end
+
+    def hpss_mono(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)
+      signal = Numo::SFloat.cast(signal)
+
+      stft_matrix = Muze.stft(signal, n_fft:, hop_length:)
       magnitude, = Muze.magphase(stft_matrix)
 
       harmonic_median = median_filter(magnitude, kernel_size, axis: 1)
@@ -32,13 +40,42 @@ module Muze
       harmonic_stft = stft_matrix * harmonic_mask
       percussive_stft = stft_matrix * percussive_mask
 
-      signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
       harmonic = Muze.istft(harmonic_stft, hop_length:, length: signal.size)
       percussive = Muze.istft(percussive_stft, hop_length:, length: signal.size)
       return [harmonic, percussive, harmonic_mask, percussive_mask] if return_masks
 
       [harmonic, percussive]
     end
+    private_class_method :hpss_mono
+
+    def hpss_channels(signal, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)
+      frames, channels = signal.shape
+      harmonic = Numo::SFloat.zeros(frames, channels)
+      percussive = Numo::SFloat.zeros(frames, channels)
+      harmonic_masks = []
+      percussive_masks = []
+
+      channels.times do |channel|
+        result = hpss_mono(
+          signal[true, channel],
+          kernel_size:,
+          power:,
+          margin:,
+          n_fft:,
+          hop_length:,
+          return_masks: true
+        )
+        harmonic[true, channel] = result[0]
+        percussive[true, channel] = result[1]
+        harmonic_masks << result[2]
+        percussive_masks << result[3]
+      end
+
+      return [harmonic, percussive, harmonic_masks, percussive_masks] if return_masks
+
+      [harmonic, percussive]
+    end
+    private_class_method :hpss_channels
 
     def validate_hpss_params!(kernel_size:, power:, margin:)
       raise Muze::ParameterError, "kernel_size must be a positive odd integer" unless kernel_size.is_a?(Integer) && kernel_size.positive? && kernel_size.odd?

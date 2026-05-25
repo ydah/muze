@@ -37,9 +37,47 @@ module Muze
       # @param values [Array<Float>]
       # @return [Float]
       def median1d(values)
-        sorted = values.sort
-        sorted[sorted.length / 2] || 0.0
+        return 0.0 if values.empty?
+
+        copy = values.map(&:to_f)
+        quickselect!(copy, copy.length / 2)
       end
+
+      def quickselect!(values, target)
+        left = 0
+        right = values.length - 1
+
+        loop do
+          return values[left] if left == right
+
+          pivot_index = partition!(values, left, right, (left + right) / 2)
+          if target == pivot_index
+            return values[target]
+          elsif target < pivot_index
+            right = pivot_index - 1
+          else
+            left = pivot_index + 1
+          end
+        end
+      end
+      private_class_method :quickselect!
+
+      def partition!(values, left, right, pivot_index)
+        pivot = values[pivot_index]
+        values[pivot_index], values[right] = values[right], values[pivot_index]
+        store_index = left
+
+        (left...right).each do |index|
+          next unless values[index] < pivot
+
+          values[store_index], values[index] = values[index], values[store_index]
+          store_index += 1
+        end
+
+        values[right], values[store_index] = values[store_index], values[right]
+        store_index
+      end
+      private_class_method :partition!
     end
   end
 end

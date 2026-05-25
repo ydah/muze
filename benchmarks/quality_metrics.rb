@@ -3,6 +3,7 @@
 require "fileutils"
 require "json"
 require "optparse"
+require "rbconfig"
 require "time"
 
 require_relative "../lib/muze"
@@ -33,6 +34,36 @@ module Muze
           unit: "seconds_per_fixture",
           direction: "lower",
           max_regression_ratio: 4.00
+        },
+        "stft_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
+        "melspectrogram_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
+        "mfcc_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
+        "chroma_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
+        "hpss_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
+        "feature_allocated_objects" => {
+          unit: "objects_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 8.00
         }
       }.freeze
 
@@ -51,7 +82,11 @@ module Muze
           generated_at: Time.now.utc.iso8601,
           ruby_version: RUBY_VERSION,
           ruby_platform: RUBY_PLATFORM,
+          host_cpu: RbConfig::CONFIG["host_cpu"],
+          numo_version: constant_version("Numo::NArray::VERSION"),
+          numo_pocketfft_version: constant_version("Numo::Pocketfft::VERSION"),
           native_extension_loaded: Muze::Native.extension_loaded?,
+          benchmark_iterations: benchmark_iterations,
           fixture_names: fixtures.keys,
           baseline_path: baseline_path,
           metrics: metrics,
@@ -83,6 +118,30 @@ module Muze
           "pitch_shift_processing_seconds" => metric_entry(
             value: average_runtime_per_fixture(fixtures) { |signal| Muze.pitch_shift(signal, sr: 22_050, n_steps: 4.0) },
             definition: METRIC_DEFINITIONS.fetch("pitch_shift_processing_seconds")
+          ),
+          "stft_processing_seconds" => metric_entry(
+            value: average_runtime_per_fixture(fixtures) { |signal| Muze.stft(signal, n_fft: 1024, hop_length: 256) },
+            definition: METRIC_DEFINITIONS.fetch("stft_processing_seconds")
+          ),
+          "melspectrogram_processing_seconds" => metric_entry(
+            value: average_runtime_per_fixture(fixtures) { |signal| Muze.melspectrogram(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64) },
+            definition: METRIC_DEFINITIONS.fetch("melspectrogram_processing_seconds")
+          ),
+          "mfcc_processing_seconds" => metric_entry(
+            value: average_runtime_per_fixture(fixtures) { |signal| Muze.mfcc(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64, n_mfcc: 13) },
+            definition: METRIC_DEFINITIONS.fetch("mfcc_processing_seconds")
+          ),
+          "chroma_processing_seconds" => metric_entry(
+            value: average_runtime_per_fixture(fixtures) { |signal| Muze.chroma_stft(y: signal, n_fft: 1024, hop_length: 256) },
+            definition: METRIC_DEFINITIONS.fetch("chroma_processing_seconds")
+          ),
+          "hpss_processing_seconds" => metric_entry(
+            value: average_runtime_per_fixture(fixtures) { |signal| Muze.hpss(signal, kernel_size: 9, n_fft: 1024, hop_length: 256) },
+            definition: METRIC_DEFINITIONS.fetch("hpss_processing_seconds")
+          ),
+          "feature_allocated_objects" => metric_entry(
+            value: average_allocations_per_fixture(fixtures) { |signal| Muze.features(y: signal, n_fft: 1024, hop_length: 256) },
+            definition: METRIC_DEFINITIONS.fetch("feature_allocated_objects")
           )
         }
       end
@@ -121,14 +180,30 @@ module Muze
       def average_runtime_per_fixture(fixtures)
         fixtures.each_value { |signal| yield(signal) }
         elapsed = measure_elapsed do
-          DEFAULT_ITERATIONS.times do
+          benchmark_iterations.times do
             fixtures.each_value { |signal| yield(signal) }
           end
         end
 
-        elapsed / (DEFAULT_ITERATIONS.to_f * fixtures.size)
+        elapsed / (benchmark_iterations.to_f * fixtures.size)
       end
       private_class_method :average_runtime_per_fixture
+
+      # @param fixtures [Hash{String => Numo::SFloat}]
+      # @yieldparam signal [Numo::SFloat]
+      # @return [Float]
+      def average_allocations_per_fixture(fixtures)
+        fixtures.each_value { |signal| yield(signal) }
+        GC.start
+        before = GC.stat.fetch(:total_allocated_objects)
+        benchmark_iterations.times do
+          fixtures.each_value { |signal| yield(signal) }
+        end
+        after = GC.stat.fetch(:total_allocated_objects)
+
+        (after - before).to_f / (benchmark_iterations * fixtures.size)
+      end
+      private_class_method :average_allocations_per_fixture
 
       # @yieldreturn [void]
       # @return [Float]
@@ -138,6 +213,23 @@ module Muze
         Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
       end
       private_class_method :measure_elapsed
+
+      # @return [Integer]
+      def benchmark_iterations
+        Integer(ENV.fetch("MUZE_BENCH_ITERATIONS", DEFAULT_ITERATIONS.to_s))
+      rescue ArgumentError
+        DEFAULT_ITERATIONS
+      end
+      private_class_method :benchmark_iterations
+
+      # @param constant_name [String]
+      # @return [String, nil]
+      def constant_version(constant_name)
+        constant_name.split("::").reject(&:empty?).reduce(Object) { |scope, name| scope.const_get(name) }.to_s
+      rescue NameError
+        nil
+      end
+      private_class_method :constant_version
 
       # @param baseline_path [String]
       # @return [Hash]
@@ -193,6 +285,10 @@ module Muze
         payload = {
           generated_at: Time.now.utc.iso8601,
           ruby_version: RUBY_VERSION,
+          ruby_platform: RUBY_PLATFORM,
+          host_cpu: RbConfig::CONFIG["host_cpu"],
+          native_extension_loaded: Muze::Native.extension_loaded?,
+          benchmark_iterations: benchmark_iterations,
           metrics: metrics.transform_values do |entry|
             {
               value: entry.fetch(:value),

@@ -17,6 +17,14 @@ RSpec.describe Muze::Feature do
       expect(mel.shape[0]).to eq(40)
       expect(mel.shape[1]).to be > 0
     end
+
+    it "accepts magnitude spectrogram input explicitly" do
+      magnitude, = Muze.magphase(Muze.stft(signal, n_fft: 512, hop_length: 128))
+      mel = described_class.melspectrogram(sr:, s: magnitude, s_kind: :magnitude, n_fft: 512, hop_length: 128, n_mels: 40)
+
+      expect(mel.shape[0]).to eq(40)
+      expect(mel.shape[1]).to eq(magnitude.shape[1])
+    end
   end
 
   describe ".mfcc" do
@@ -38,6 +46,15 @@ RSpec.describe Muze::Feature do
       lifted = described_class.mfcc(y: signal, sr:, n_mfcc: 13, n_fft: 512, hop_length: 128, n_mels: 40, lifter: 22)
 
       expect((plain - lifted).abs.max).to be > 0.0
+    end
+
+    it "accepts precomputed log-mel input" do
+      mel = described_class.melspectrogram(y: signal, sr:, n_fft: 512, hop_length: 128, n_mels: 40)
+      log_mel = Muze.power_to_db(mel)
+      coeffs = described_class.mfcc(sr:, s: log_mel, s_kind: :log_mel, n_mfcc: 13)
+
+      expect(coeffs.shape[0]).to eq(13)
+      expect(coeffs.shape[1]).to eq(log_mel.shape[1])
     end
   end
 

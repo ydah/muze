@@ -13,7 +13,7 @@ module Muze
     # @param norm [Integer, nil]
     # @param tuning [Float]
     # @return [Numo::SFloat] shape: [n_chroma, frames]
-    def chroma_stft(y: nil, sr: 22_050, s: nil, n_chroma: 12, n_fft: 2048, hop_length: 512, norm: 2, tuning: 0.0)
+    def chroma_stft(y: nil, sr: 22_050, s: nil, n_chroma: 12, n_fft: 2048, hop_length: 512, norm: 2, tuning: 0.0, ctroct: nil, octwidth: nil)
       spectrum = if s
                    Numo::SFloat.cast(s)
                  else
@@ -23,9 +23,39 @@ module Muze
       end
 
       spectrum = spectrum.expand_dims(1) if spectrum.ndim == 1
-      filter_bank = Muze::Filters.chroma(sr:, n_fft:, n_chroma:, tuning:)
+      filter_bank = Muze::Filters.chroma(sr:, n_fft:, n_chroma:, tuning:, ctroct:, octwidth:)
       chroma = Muze::Core::Matrix.multiply(filter_bank, spectrum)
       normalize(chroma, norm:)
+    end
+
+    # @return [Numo::SFloat] shape: [6, frames]
+    def tonnetz(y: nil, chroma: nil, sr: 22_050, n_fft: 2048, hop_length: 512)
+      chroma_matrix = chroma ? Numo::SFloat.cast(chroma) : chroma_stft(y:, sr:, n_fft:, hop_length:)
+      chroma_matrix = chroma_matrix.expand_dims(1) if chroma_matrix.ndim == 1
+      raise Muze::ParameterError, "tonnetz requires 12-bin chroma" unless chroma_matrix.shape[0] == 12
+
+      frames = chroma_matrix.shape[1]
+      output = Numo::SFloat.zeros(6, frames)
+      intervals = [7, 7, 3, 3, 4, 4]
+      phases = [0.0, Math::PI / 2.0, 0.0, Math::PI / 2.0, 0.0, Math::PI / 2.0]
+
+      frames.times do |frame|
+        vector = chroma_matrix[true, frame]
+        total = vector.sum
+        next if total <= 0.0
+
+        normalized = vector / total
+        6.times do |dimension|
+          sum = 0.0
+          12.times do |chroma_index|
+            angle = ((Math::PI * intervals[dimension] * chroma_index) / 6.0) + phases[dimension]
+            sum += normalized[chroma_index] * Math.cos(angle)
+          end
+          output[dimension, frame] = sum
+        end
+      end
+
+      output
     end
 
     def normalize(chroma, norm:)

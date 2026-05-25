@@ -25,7 +25,7 @@ module Muze
         signal = pad_signal(signal, n_fft / 2, pad_mode) if center
         signal = signal.empty? ? [0.0] : signal
 
-        frames = frame_signal(signal, n_fft, hop_length, pad_end:)
+        frames = Muze::Core::Frames.slice(signal, frame_length: n_fft, hop_length:, pad_end:)
         window_values = Muze::Core::Windows.resolve(window, win_length).to_a
         window_offset = (n_fft - win_length) / 2
 
@@ -53,7 +53,7 @@ module Muze
       # @param center [Boolean]
       # @param length [Integer, nil]
       # @return [Numo::SFloat]
-      def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil)
+      def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat)
         frequency_bins, frame_count = stft_matrix.shape
         n_fft = (frequency_bins - 1) * 2
         win_length ||= n_fft
@@ -91,18 +91,27 @@ module Muze
         end
 
         output = adjust_length(output, length) if length
-        Numo::SFloat.cast(output)
+        dtype_class(dtype).cast(output)
       end
 
       # @param stft_matrix [Numo::DComplex]
       # @param eps [Float]
+      # @param dtype [Class, Symbol]
       # @return [Array<Numo::SFloat, Numo::DComplex>]
-      def magphase(stft_matrix, eps: EPSILON)
+      def magphase(stft_matrix, eps: EPSILON, dtype: Numo::SFloat)
         raise Muze::ParameterError, "eps must be positive" unless eps.positive?
 
-        magnitude = stft_matrix.abs.cast_to(Numo::SFloat)
+        magnitude = stft_matrix.abs.cast_to(dtype_class(dtype))
         phase = stft_matrix / (magnitude + eps)
         [magnitude, phase]
+      end
+
+      # @param chunks [Enumerable<Array<Float>, Numo::NArray>]
+      # @return [Array<Numo::DComplex>]
+      def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect)
+        chunks.map do |chunk|
+          stft(chunk, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end: true)
+        end
       end
 
       # @param s [Numo::NArray]
@@ -254,19 +263,6 @@ module Muze
       end
       private_class_method :signal_to_a
 
-      def frame_signal(signal, n_fft, hop_length, pad_end:)
-        return Muze::Native.frame_slices(signal, n_fft, hop_length) unless pad_end
-
-        return [adjust_length(signal, n_fft)] if signal.length <= n_fft
-
-        frame_count = ((signal.length - n_fft).to_f / hop_length).ceil + 1
-        Array.new(frame_count) do |index|
-          start = index * hop_length
-          adjust_length(signal[start, n_fft] || [], n_fft)
-        end
-      end
-      private_class_method :frame_signal
-
       def pad_signal(signal, pad, mode)
         return signal if pad <= 0
 
@@ -381,6 +377,19 @@ module Muze
         [value.length, value.first.length]
       end
       private_class_method :array_shape
+
+      def dtype_class(dtype)
+        case dtype
+        when :sfloat, :float32 then Numo::SFloat
+        when :dfloat, :float64 then Numo::DFloat
+        else
+          return Numo::SFloat if dtype == Numo::SFloat
+          return Numo::DFloat if dtype == Numo::DFloat
+
+          raise Muze::ParameterError, "dtype must be :sfloat, :float32, :dfloat, :float64, Numo::SFloat, or Numo::DFloat"
+        end
+      end
+      private_class_method :dtype_class
     end
   end
 end

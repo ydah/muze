@@ -10,20 +10,21 @@ module Muze
     # @param y [Numo::SFloat, Array<Float>]
     # @param rate [Float]
     # @return [Numo::SFloat]
-    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder)
+    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false)
       raise Muze::ParameterError, "rate must be positive" unless rate.positive?
-      raise Muze::ParameterError, "method must be :phase_vocoder, :ola, or :linear" unless %i[phase_vocoder ola linear].include?(method)
+      raise Muze::ParameterError, "method must be :phase_vocoder, :ola, :wsola, or :linear" unless %i[phase_vocoder ola wsola linear].include?(method)
 
       signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(Array(y))
+      return apply_channels(signal) { |channel| time_stretch(channel, rate:, n_fft:, hop_length:, method:, phase_lock:) } if signal.ndim == 2
       return signal if signal.empty? || rate == 1.0
       return linear_time_stretch(signal.to_a, rate) if method == :linear
-      return ola_time_stretch(signal.to_a, rate) if method == :ola || signal.size < MIN_PHASE_VOCODER_SAMPLES
+      return ola_time_stretch(signal.to_a, rate) if %i[ola wsola].include?(method) || signal.size < MIN_PHASE_VOCODER_SAMPLES
 
       n_fft ||= phase_vocoder_fft_size(signal.size)
       hop_length ||= [n_fft / 4, 1].max
 
       stft_matrix = Muze::Core::STFT.stft(signal, n_fft:, hop_length:, center: true)
-      stretched_stft = phase_vocoder(stft_matrix, rate:, hop_length:, n_fft:)
+      stretched_stft = phase_vocoder(stft_matrix, rate:, hop_length:, n_fft:, phase_lock:)
       target_length = [(signal.size / rate).round, 1].max
 
       Muze::Core::STFT.istft(stretched_stft, hop_length:, center: true, length: target_length)
@@ -33,18 +34,22 @@ module Muze
     # @param sr [Integer]
     # @param n_steps [Float]
     # @return [Numo::SFloat]
-    def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto)
+    def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto, normalize: false, clip: nil)
       raise Muze::ParameterError, "sr must be positive" unless sr.positive?
       raise Muze::ParameterError, "bins_per_octave must be positive" unless bins_per_octave.positive?
 
-      signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
+      signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      return apply_channels(signal) { |channel| pitch_shift(channel, sr:, n_steps:, bins_per_octave:, res_type:, normalize:, clip:) } if signal.ndim == 2
       return signal if n_steps.zero?
 
       rate = 2.0**(-n_steps.to_f / bins_per_octave)
       stretched = time_stretch(signal, rate:)
       effective_res_type = res_type == :auto ? (signal.size >= MIN_PHASE_VOCODER_SAMPLES ? :sinc : :linear) : res_type
       restored = resample_for_pitch_shift(stretched, target_size: signal.size, res_type: effective_res_type)
-      Numo::SFloat.cast(restored[0...signal.size])
+      output = Numo::SFloat.cast(restored[0...signal.size])
+      output = normalize_peak(output) if normalize
+      output = output.clip(-clip, clip) if clip
+      output
     end
 
     # @param y [Numo::SFloat, Array<Float>]
@@ -57,8 +62,9 @@ module Muze
       raise Muze::ParameterError, "frame_length and hop_length must be positive" unless frame_length.positive? && hop_length.positive?
       raise Muze::ParameterError, "aggregate must be :mean or :max" unless %i[mean max].include?(aggregate)
 
-      signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
-      frames = frame_signal(signal.to_a, frame_length, hop_length)
+      signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      amplitude = sample_amplitude(signal, aggregate:)
+      frames = Muze::Core::Frames.slice(amplitude, frame_length:, hop_length:, pad_end: true)
       energies = frames.map do |frame|
         values = frame.map { |value| value * value }
         aggregate == :max ? Math.sqrt(values.max || 0.0) : Math.sqrt(values.sum(0.0) / frame.length)
@@ -69,18 +75,23 @@ module Muze
       return [Numo::SFloat[], [0, 0]] if active_frames.empty?
 
       search_start = active_frames.first * hop_length
-      search_end = [(active_frames.last * hop_length) + frame_length, signal.size].min
-      abs_signal = signal.abs
-      active_samples = (search_start...search_end).select { |index| abs_signal[index] >= threshold }
-      return [Numo::SFloat[], [0, 0]] if active_samples.empty?
+      sample_count = amplitude.length
+      search_end = [(active_frames.last * hop_length) + frame_length, sample_count].min
+      active_samples = (search_start...search_end).select { |index| amplitude[index] >= threshold }
+      empty = signal.ndim == 2 ? Numo::SFloat.zeros(0, signal.shape[1]) : Numo::SFloat[]
+      return [empty, [0, 0]] if active_samples.empty?
 
       start_sample = active_samples.first
       end_sample = active_samples.last + 1
-      [signal[start_sample...end_sample], [start_sample, end_sample]]
+      trimmed = signal.ndim == 2 ? signal[start_sample...end_sample, true] : signal[start_sample...end_sample]
+      [trimmed, [start_sample, end_sample]]
     end
 
     def preemphasis(y, coef: 0.97)
-      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      matrix = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      return apply_channels(matrix) { |channel| preemphasis(channel, coef:) } if matrix.ndim == 2
+
+      signal = matrix.to_a
       return Numo::SFloat.cast(signal) if signal.empty?
 
       output = Array.new(signal.length, 0.0)
@@ -90,7 +101,10 @@ module Muze
     end
 
     def deemphasis(y, coef: 0.97)
-      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      matrix = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(y)
+      return apply_channels(matrix) { |channel| deemphasis(channel, coef:) } if matrix.ndim == 2
+
+      signal = matrix.to_a
       return Numo::SFloat.cast(signal) if signal.empty?
 
       output = Array.new(signal.length, 0.0)
@@ -115,7 +129,7 @@ module Muze
     # @param hop_length [Integer]
     # @param n_fft [Integer]
     # @return [Numo::DComplex]
-    def phase_vocoder(stft_matrix, rate:, hop_length:, n_fft:)
+    def phase_vocoder(stft_matrix, rate:, hop_length:, n_fft:, phase_lock: false)
       frequency_bins, frame_count = stft_matrix.shape
       return stft_matrix if frame_count <= 1
 
@@ -154,9 +168,31 @@ module Muze
         end
       end
 
-      stretched
+      phase_lock ? phase_lock_spectrum(stretched) : stretched
     end
     private_class_method :phase_vocoder
+
+    def phase_lock_spectrum(stft_matrix)
+      rows, cols = stft_matrix.shape
+      output = stft_matrix.dup
+      cols.times do |col|
+        peak_bins = local_peak_bins(stft_matrix[true, col])
+        next if peak_bins.empty?
+
+        rows.times do |row|
+          peak = peak_bins.min_by { |candidate| (candidate - row).abs }
+          output[row, col] = Complex.polar(stft_matrix[row, col].abs, phase_of(stft_matrix[peak, col]))
+        end
+      end
+      output
+    end
+    private_class_method :phase_lock_spectrum
+
+    def local_peak_bins(spectrum)
+      values = spectrum.abs.to_a
+      (1...(values.length - 1)).select { |index| values[index] >= values[index - 1] && values[index] >= values[index + 1] }
+    end
+    private_class_method :local_peak_bins
 
     # @param complex_number [Complex]
     # @return [Float]
@@ -243,18 +279,6 @@ module Muze
     end
     private_class_method :resample_for_pitch_shift
 
-    def frame_signal(signal, frame_length, hop_length)
-      return [signal + Array.new(frame_length - signal.length, 0.0)] if signal.length <= frame_length
-
-      frame_count = ((signal.length - frame_length).to_f / hop_length).ceil + 1
-      Array.new(frame_count) do |index|
-        start = index * hop_length
-        frame = signal[start, frame_length] || []
-        frame.length < frame_length ? frame + Array.new(frame_length - frame.length, 0.0) : frame
-      end
-    end
-    private_class_method :frame_signal
-
     def trim_reference(energies, ref:)
       case ref
       when :max then energies.max || 0.0
@@ -265,5 +289,37 @@ module Muze
       end
     end
     private_class_method :trim_reference
+
+    def apply_channels(matrix)
+      frames, channels = matrix.shape
+      processed = channels.times.map { |channel| yield(matrix[true, channel]) }
+      output_length = processed.map(&:size).max || frames
+      output = Numo::SFloat.zeros(output_length, channels)
+      channels.times do |channel|
+        values = processed[channel]
+        output[0...values.size, channel] = values
+      end
+      output
+    end
+    private_class_method :apply_channels
+
+    def sample_amplitude(signal, aggregate:)
+      return signal.abs.to_a unless signal.ndim == 2
+
+      frames, channels = signal.shape
+      Array.new(frames) do |frame|
+        values = Array.new(channels) { |channel| signal[frame, channel].abs }
+        aggregate == :max ? values.max : values.sum(0.0) / channels
+      end
+    end
+    private_class_method :sample_amplitude
+
+    def normalize_peak(signal)
+      peak = signal.abs.max
+      return signal if peak <= 0.0
+
+      signal / peak
+    end
+    private_class_method :normalize_peak
   end
 end

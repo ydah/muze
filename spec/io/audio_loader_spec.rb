@@ -3,6 +3,7 @@
 require "fileutils"
 require "open3"
 require "pathname"
+require "stringio"
 require "tempfile"
 require "tmpdir"
 
@@ -67,6 +68,27 @@ RSpec.describe Muze::IO::AudioLoader do
       expect(left.ndim).to eq(1)
       expect(right.ndim).to eq(1)
       expect(left.size).to eq(right.size)
+    end
+
+    it "supports weighted stereo downmix" do
+      left, = Muze.load(stereo_path, sr: 44_100, mono: :left)
+      weighted, = Muze.load(stereo_path, sr: 44_100, mono: :weighted, weights: [1.0, 0.0])
+
+      expect((left - weighted).abs.max).to be < 1.0e-6
+    end
+
+    it "loads WAV data from StringIO with explicit format" do
+      io = StringIO.new(File.binread(mono_path))
+      y, sr = Muze.load(io, sr: 44_100, format: :wav)
+
+      expect(sr).to eq(44_100)
+      expect(y.size).to eq(44_100)
+    end
+
+    it "rejects files larger than max_bytes" do
+      expect do
+        Muze.load(mono_path, max_bytes: 1)
+      end.to raise_error(Muze::AudioLoadError, /too large/)
     end
 
     it "supports dtype and peak normalization" do

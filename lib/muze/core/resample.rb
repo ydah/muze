@@ -10,7 +10,7 @@ module Muze
       # @param y [Numo::SFloat, Array<Float>] waveform signal
       # @param orig_sr [Integer] source sampling rate
       # @param target_sr [Integer] destination sampling rate
-      # @param res_type [Symbol] :nearest, :linear, or :sinc
+      # @param res_type [Symbol] :nearest, :linear, :sinc, or :polyphase
       # @param target_length [Integer, nil]
       # @param taps [Integer]
       # @param beta [Float]
@@ -35,6 +35,7 @@ module Muze
         when :nearest then nearest_resample(source, orig_sr, target_sr, target_length:)
         when :linear then linear_resample(source, orig_sr, target_sr, target_length:)
         when :sinc then sinc_resample(source, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:)
+        when :polyphase then polyphase_resample(source, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:)
         else
           raise Muze::ParameterError, "Unsupported res_type: #{res_type}"
         end
@@ -160,6 +161,20 @@ module Muze
         Numo::SFloat.cast(output)
       end
       private_class_method :sinc_resample
+
+      def polyphase_resample(signal, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:)
+        divisor = orig_sr.gcd(target_sr)
+        up = target_sr / divisor
+        down = orig_sr / divisor
+        return sinc_resample(signal, orig_sr, target_sr, target_length:, taps:, beta:, cutoff:) if up > 32 || down > 32
+
+        expanded = Array.new(signal.length * up, 0.0)
+        signal.each_with_index { |sample, index| expanded[index * up] = sample }
+        filtered = sinc_resample(expanded, orig_sr * up, orig_sr * up, target_length: expanded.length, taps:, beta:, cutoff: cutoff || (1.0 / [up, down].max))
+        decimated = filtered.to_a.each_slice(down).map(&:first)
+        adjust_length(decimated, target_length || output_length(signal.length, orig_sr, target_sr, target_length:))
+      end
+      private_class_method :polyphase_resample
 
       def adjust_length(signal, target_length)
         return Numo::SFloat.cast(signal) unless target_length

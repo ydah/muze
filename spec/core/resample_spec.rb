@@ -23,5 +23,13 @@ RSpec.describe Muze::Core::Resample do
       expect(result.size).to eq(5)
       expect(result.to_a).to all(satisfy { |value| [0.0, 1.0].include?(value) })
     end
+
+    it "supports polyphase resampling" do
+      signal = Numo::SFloat.cast(Array.new(120) { |index| Math.sin((2.0 * Math::PI * index) / 24.0) })
+      result = described_class.resample(signal, orig_sr: 12_000, target_sr: 8_000, res_type: :polyphase)
+
+      expect(result.size).to eq(80)
+      expect(result.to_a.all?(&:finite?)).to be(true)
+    end
   end
 end

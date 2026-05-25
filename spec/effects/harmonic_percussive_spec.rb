@@ -61,5 +61,19 @@ RSpec.describe Muze::Effects do
         described_class.hpss(signal, kernel_size: 10)
       end.to raise_error(Muze::ParameterError, /kernel_size/)
     end
+
+    it "processes multi-channel input channel-wise" do
+      signal = mixed_signal
+      stereo = Numo::SFloat.zeros(signal.size, 2)
+      stereo[true, 0] = signal
+      stereo[true, 1] = signal * 0.5
+
+      harmonic, percussive, harmonic_masks, percussive_masks = described_class.hpss(stereo, kernel_size: 9, n_fft: 1024, hop_length: 256, return_masks: true)
+
+      expect(harmonic.shape).to eq(stereo.shape)
+      expect(percussive.shape).to eq(stereo.shape)
+      expect(harmonic_masks.length).to eq(2)
+      expect(percussive_masks.length).to eq(2)
+    end
   end
 end

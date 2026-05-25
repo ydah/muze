@@ -19,10 +19,16 @@ module Muze
     # @param pad_mode [Symbol]
     # @param norm [Symbol, nil]
     # @return [Numo::SFloat]
-    def melspectrogram(y: nil, sr: 22_050, s: nil, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, power: 2.0, center: true, window: :hann, pad_mode: :reflect, norm: nil)
+    def melspectrogram(y: nil, sr: 22_050, s: nil, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, power: 2.0, center: true, window: :hann, pad_mode: :reflect, norm: nil, s_kind: :power)
       raise Muze::ParameterError, "power must be positive" unless power.positive?
+      raise Muze::ParameterError, "s_kind must be :power or :magnitude" unless %i[power magnitude].include?(s_kind)
 
-      spectrum = s ? Numo::SFloat.cast(s) : spectrogram(y, n_fft:, hop_length:, power:, center:, window:, pad_mode:)
+      spectrum = if s
+                   provided = Numo::SFloat.cast(s)
+                   s_kind == :magnitude ? (provided**power).cast_to(Numo::SFloat) : provided
+                 else
+                   spectrogram(y, n_fft:, hop_length:, power:, center:, window:, pad_mode:)
+                 end
       filter_bank = Muze::Filters.mel(sr:, n_fft:, n_mels:, fmin:, fmax:, norm:)
       Muze::Core::Matrix.multiply(filter_bank, spectrum)
     end
@@ -40,9 +46,10 @@ module Muze
     # @param lifter [Integer]
     # @param norm [Symbol, nil]
     # @return [Numo::SFloat]
-    def mfcc(y: nil, sr: 22_050, s: nil, n_mfcc: 20, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, dct_type: 2, lifter: 0, norm: :ortho)
+    def mfcc(y: nil, sr: 22_050, s: nil, n_mfcc: 20, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, dct_type: 2, lifter: 0, norm: :ortho, s_kind: :mel_power)
       raise Muze::ParameterError, "n_mfcc must be positive" unless n_mfcc.positive?
       raise Muze::ParameterError, "lifter must be >= 0" if lifter.negative?
+      raise Muze::ParameterError, "s_kind must be :mel_power or :log_mel" unless %i[mel_power log_mel].include?(s_kind)
 
       mel_spec = if s
                    Numo::SFloat.cast(s)
@@ -50,7 +57,7 @@ module Muze
                    melspectrogram(y:, sr:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
                  end
 
-      log_mel = Muze.power_to_db(mel_spec)
+      log_mel = s_kind == :log_mel ? mel_spec : Muze.power_to_db(mel_spec)
       dct = Muze::Core::DCT.dct(log_mel, type: dct_type, axis: 0, norm:)
       coeffs = dct[0...n_mfcc, true].cast_to(Numo::SFloat)
       apply_lifter(coeffs, lifter:)
@@ -61,9 +68,9 @@ module Muze
     # @param width [Integer]
     # @param mode [Symbol]
     # @return [Numo::SFloat]
-      def delta(data, order: 1, width: 9, mode: :interp)
-        raise Muze::ParameterError, "order must be >= 1" unless order >= 1
-        raise Muze::ParameterError, "width must be odd and >= 3" unless width.odd? && width >= 3
+    def delta(data, order: 1, width: 9, mode: :interp)
+      raise Muze::ParameterError, "order must be >= 1" unless order >= 1
+      raise Muze::ParameterError, "width must be odd and >= 3" unless width.odd? && width >= 3
       raise Muze::ParameterError, "mode must be :interp, :nearest, :mirror, or :constant" unless %i[interp nearest mirror constant].include?(mode)
 
       result = Numo::SFloat.cast(data)

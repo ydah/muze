@@ -7,6 +7,9 @@ require_relative "benchmarks/quality_metrics"
 
 RSpec::Core::RakeTask.new(:spec)
 
+CLEAN.include("ext/muze/*.o", "ext/muze/mkmf.log")
+CLOBBER.include("ext/muze/Makefile", "ext/muze/*.bundle", "ext/muze/*.dSYM")
+
 directory "ext/muze"
 
 desc "Compile optional C extension"

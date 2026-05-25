@@ -45,6 +45,23 @@ RSpec.describe Muze::Effects do
 
       expect(stretched.size).to be_within(1).of(signal.size / 2)
     end
+
+    it "supports WSOLA alias and phase locking" do
+      wsola = described_class.time_stretch(signal, rate: 1.5, method: :wsola)
+      locked = described_class.time_stretch(long_signal, rate: 1.5, phase_lock: true)
+
+      expect(wsola.size).to be_within(1).of((signal.size / 1.5).round)
+      expect(locked.size).to be_within(1).of((long_signal.size / 1.5).round)
+    end
+
+    it "processes multi-channel input" do
+      stereo = Numo::SFloat.zeros(signal.size, 2)
+      stereo[true, 0] = signal
+      stereo[true, 1] = signal * 0.5
+      stretched = described_class.time_stretch(stereo, rate: 2.0, method: :linear)
+
+      expect(stretched.shape).to eq([signal.size / 2, 2])
+    end
   end
 
   describe ".pitch_shift" do
@@ -73,6 +90,21 @@ RSpec.describe Muze::Effects do
 
       expect(shifted.size).to eq(signal.size)
     end
+
+    it "can normalize and clip output" do
+      shifted = described_class.pitch_shift(signal * 0.25, sr:, n_steps: 1, normalize: true, clip: 0.5)
+
+      expect(shifted.abs.max).to be <= 0.5
+    end
+
+    it "processes multi-channel input" do
+      stereo = Numo::SFloat.zeros(signal.size, 2)
+      stereo[true, 0] = signal
+      stereo[true, 1] = signal * 0.5
+      shifted = described_class.pitch_shift(stereo, sr:, n_steps: 0.5)
+
+      expect(shifted.shape).to eq(stereo.shape)
+    end
   end
 
   describe ".trim" do
@@ -86,6 +118,18 @@ RSpec.describe Muze::Effects do
       expect(start_idx).to be > 0
       expect(end_idx).to be > start_idx
     end
+
+    it "trims multi-channel input with frame settings" do
+      padded = Numo::SFloat.zeros(signal.size + 4000, 2)
+      padded[2000...(2000 + signal.size), 0] = signal
+      padded[2000...(2000 + signal.size), 1] = signal * 0.5
+
+      trimmed, (start_idx, end_idx) = described_class.trim(padded, top_db: 30, frame_length: 1024, hop_length: 256, aggregate: :max)
+
+      expect(trimmed.shape[1]).to eq(2)
+      expect(start_idx).to be > 0
+      expect(end_idx).to be > start_idx
+    end
   end
 
   describe "preemphasis/deemphasis" do
@@ -94,6 +138,15 @@ RSpec.describe Muze::Effects do
       restored = described_class.deemphasis(emphasized)
 
       expect((restored - signal).abs.max).to be < 1.0e-4
+    end
+
+    it "round-trips multi-channel signals" do
+      stereo = Numo::SFloat.zeros(signal.size, 2)
+      stereo[true, 0] = signal
+      stereo[true, 1] = signal * 0.5
+      restored = described_class.deemphasis(described_class.preemphasis(stereo))
+
+      expect((restored - stereo).abs.max).to be < 1.0e-4
     end
   end
 

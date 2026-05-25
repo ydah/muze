@@ -12,21 +12,11 @@ module Muze
         left_matrix = left_matrix.expand_dims(1) if left_matrix.ndim == 1
         right_matrix = right_matrix.expand_dims(1) if right_matrix.ndim == 1
 
-        left_rows, left_cols = left_matrix.shape
-        right_rows, right_cols = right_matrix.shape
+        _, left_cols = left_matrix.shape
+        right_rows, = right_matrix.shape
         raise Muze::ParameterError, "Matrix dimensions do not align" unless left_cols == right_rows
 
-        output = Numo::SFloat.zeros(left_rows, right_cols)
-
-        left_rows.times do |row|
-          right_cols.times do |col|
-            sum = 0.0
-            left_cols.times { |idx| sum += left_matrix[row, idx] * right_matrix[idx, col] }
-            output[row, col] = sum
-          end
-        end
-
-        output
+        left_matrix.dot(right_matrix).cast_to(Numo::SFloat)
       end
     end
   end
