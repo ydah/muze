@@ -100,4 +100,22 @@ RSpec.describe Muze::Feature do
       expect(result.fetch(:tonnetz).shape[0]).to eq(6)
     end
   end
+
+  describe ".beat_sync" do
+    it "aggregates frame features between beat boundaries" do
+      data = Numo::SFloat.cast([[1.0, 3.0, 10.0, 14.0], [2.0, 4.0, 6.0, 8.0]])
+      synced = described_class.beat_sync(data, beats: [2], aggregate: :mean)
+
+      expect(synced.shape).to eq([2, 2])
+      expect(synced[0, 0]).to eq(2.0)
+      expect(synced[0, 1]).to eq(12.0)
+    end
+
+    it "supports median aggregation through the public API" do
+      synced = Muze.beat_sync([1.0, 5.0, 3.0, 9.0], beats: [3], aggregate: :median)
+
+      expect(synced.shape).to eq([1, 2])
+      expect(synced[0, 0]).to eq(3.0)
+    end
+  end
 end

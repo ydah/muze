@@ -35,6 +35,11 @@ module Muze
           direction: "lower",
           max_regression_ratio: 4.00
         },
+        "resample_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
         "stft_processing_seconds" => {
           unit: "seconds_per_fixture",
           direction: "lower",
@@ -111,34 +116,14 @@ module Muze
             value: average_istft_error(fixtures),
             definition: METRIC_DEFINITIONS.fetch("istft_reconstruction_error")
           ),
-          "time_stretch_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.time_stretch(signal, rate: 1.25) },
-            definition: METRIC_DEFINITIONS.fetch("time_stretch_processing_seconds")
-          ),
-          "pitch_shift_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.pitch_shift(signal, sr: 22_050, n_steps: 4.0) },
-            definition: METRIC_DEFINITIONS.fetch("pitch_shift_processing_seconds")
-          ),
-          "stft_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.stft(signal, n_fft: 1024, hop_length: 256) },
-            definition: METRIC_DEFINITIONS.fetch("stft_processing_seconds")
-          ),
-          "melspectrogram_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.melspectrogram(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64) },
-            definition: METRIC_DEFINITIONS.fetch("melspectrogram_processing_seconds")
-          ),
-          "mfcc_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.mfcc(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64, n_mfcc: 13) },
-            definition: METRIC_DEFINITIONS.fetch("mfcc_processing_seconds")
-          ),
-          "chroma_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.chroma_stft(y: signal, n_fft: 1024, hop_length: 256) },
-            definition: METRIC_DEFINITIONS.fetch("chroma_processing_seconds")
-          ),
-          "hpss_processing_seconds" => metric_entry(
-            value: average_runtime_per_fixture(fixtures) { |signal| Muze.hpss(signal, kernel_size: 9, n_fft: 1024, hop_length: 256) },
-            definition: METRIC_DEFINITIONS.fetch("hpss_processing_seconds")
-          ),
+          "time_stretch_processing_seconds" => runtime_metric_entry("time_stretch_processing_seconds", fixtures) { |signal| Muze.time_stretch(signal, rate: 1.25) },
+          "pitch_shift_processing_seconds" => runtime_metric_entry("pitch_shift_processing_seconds", fixtures) { |signal| Muze.pitch_shift(signal, sr: 22_050, n_steps: 4.0) },
+          "resample_processing_seconds" => runtime_metric_entry("resample_processing_seconds", fixtures) { |signal| Muze.resample(signal, orig_sr: 22_050, target_sr: 16_000, res_type: :sinc) },
+          "stft_processing_seconds" => runtime_metric_entry("stft_processing_seconds", fixtures) { |signal| Muze.stft(signal, n_fft: 1024, hop_length: 256) },
+          "melspectrogram_processing_seconds" => runtime_metric_entry("melspectrogram_processing_seconds", fixtures) { |signal| Muze.melspectrogram(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64) },
+          "mfcc_processing_seconds" => runtime_metric_entry("mfcc_processing_seconds", fixtures) { |signal| Muze.mfcc(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64, n_mfcc: 13) },
+          "chroma_processing_seconds" => runtime_metric_entry("chroma_processing_seconds", fixtures) { |signal| Muze.chroma_stft(y: signal, n_fft: 1024, hop_length: 256) },
+          "hpss_processing_seconds" => runtime_metric_entry("hpss_processing_seconds", fixtures) { |signal| Muze.hpss(signal, kernel_size: 9, n_fft: 1024, hop_length: 256) },
           "feature_allocated_objects" => metric_entry(
             value: average_allocations_per_fixture(fixtures) { |signal| Muze.features(y: signal, n_fft: 1024, hop_length: 256) },
             definition: METRIC_DEFINITIONS.fetch("feature_allocated_objects")
@@ -160,6 +145,18 @@ module Muze
       end
       private_class_method :metric_entry
 
+      def runtime_metric_entry(metric_name, fixtures)
+        stats = runtime_stats_per_fixture(fixtures) { |signal| yield(signal) }
+        metric_entry(
+          value: stats.fetch(:mean),
+          definition: METRIC_DEFINITIONS.fetch(metric_name)
+        ).merge(
+          median_value: stats.fetch(:median),
+          min_value: stats.fetch(:min)
+        )
+      end
+      private_class_method :runtime_metric_entry
+
       # @param fixtures [Hash{String => Numo::SFloat}]
       # @return [Float]
       def average_istft_error(fixtures)
@@ -178,16 +175,27 @@ module Muze
       # @yieldparam signal [Numo::SFloat]
       # @return [Float]
       def average_runtime_per_fixture(fixtures)
-        fixtures.each_value { |signal| yield(signal) }
-        elapsed = measure_elapsed do
-          benchmark_iterations.times do
-            fixtures.each_value { |signal| yield(signal) }
-          end
-        end
-
-        elapsed / (benchmark_iterations.to_f * fixtures.size)
+        runtime_stats_per_fixture(fixtures) { |signal| yield(signal) }.fetch(:mean)
       end
       private_class_method :average_runtime_per_fixture
+
+      def runtime_stats_per_fixture(fixtures)
+        fixtures.each_value { |signal| yield(signal) }
+        samples = []
+        benchmark_iterations.times do
+          fixtures.each_value do |signal|
+            samples << measure_elapsed { yield(signal) }
+          end
+        end
+        sorted = samples.sort
+
+        {
+          mean: samples.sum / samples.size.to_f,
+          median: sorted[sorted.size / 2],
+          min: sorted.first
+        }
+      end
+      private_class_method :runtime_stats_per_fixture
 
       # @param fixtures [Hash{String => Numo::SFloat}]
       # @yieldparam signal [Numo::SFloat]
@@ -290,12 +298,15 @@ module Muze
           native_extension_loaded: Muze::Native.extension_loaded?,
           benchmark_iterations: benchmark_iterations,
           metrics: metrics.transform_values do |entry|
-            {
+            payload = {
               value: entry.fetch(:value),
               unit: entry.fetch(:unit),
               direction: entry.fetch(:direction),
               max_regression_ratio: entry.fetch(:max_regression_ratio)
             }
+            payload[:median_value] = entry.fetch(:median_value) if entry.key?(:median_value)
+            payload[:min_value] = entry.fetch(:min_value) if entry.key?(:min_value)
+            payload
           end
         }
         File.write(baseline_path, JSON.pretty_generate(payload))

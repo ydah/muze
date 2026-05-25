@@ -11,7 +11,7 @@ module Muze
     # @param y_axis [Symbol]
     # @param output [String, nil]
     # @return [String] SVG content
-    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil)
+    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil, fragment: false)
       validate_axis!(x_axis:, y_axis:)
       raise Muze::ParameterError, "width and height must be positive" unless width.positive? && height.positive?
 
@@ -43,14 +43,22 @@ module Muze
         end
       end
 
-      svg = [
-        "<svg xmlns='http://www.w3.org/2000/svg' width='#{width.to_i}' height='#{height.to_i}' viewBox='0 0 #{width.to_i} #{height.to_i}'>",
-        "<rect width='100%' height='100%' fill='#0b132b' />",
+      body = [
         "<g data-x-axis='#{x_axis}' data-y-axis='#{y_axis}' data-sr='#{sr}' data-hop-length='#{hop_length}'>",
         rects.join,
-        "</g>",
-        "</svg>"
+        "</g>"
       ].join
+
+      svg = if fragment
+              body
+            else
+              [
+        "<svg xmlns='http://www.w3.org/2000/svg' width='#{width.to_i}' height='#{height.to_i}' viewBox='0 0 #{width.to_i} #{height.to_i}'>",
+        "<rect width='100%' height='100%' fill='#0b132b' />",
+        body,
+        "</svg>"
+              ].join
+            end
 
       write_output(output, svg) if output
       svg
@@ -79,6 +87,40 @@ module Muze
         "<rect width='100%' height='100%' fill='#111827' />",
         "<g data-sr='#{sr}' data-channels='#{channels}' transform='translate(0 #{middle * 0.0})'>",
         paths.join,
+        "</g>",
+        "</svg>"
+      ].join
+
+      write_output(output, svg) if output
+      svg
+    end
+
+    # @return [String] SVG content
+    def onsetshow(onset_envelope, sr: 22_050, hop_length: 512, output: nil, width: 800, height: 160, normalize: true)
+      raise Muze::ParameterError, "width and height must be positive" unless width.positive? && height.positive?
+      raise Muze::ParameterError, "sr and hop_length must be positive" unless sr.positive? && hop_length.positive?
+
+      envelope = Numo::SFloat.cast(onset_envelope).to_a.flatten
+      raise Muze::ParameterError, "onset envelope must contain only finite values" unless envelope.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+      peak = envelope.map(&:abs).max.to_f
+      values = normalize && peak.positive? ? envelope.map { |value| value / peak } : envelope
+      width = width.to_f
+      height = height.to_f
+      bar_width = width / [values.length, 1].max
+      bars = values.each_with_index.map do |value, index|
+        scaled = [[value, 0.0].max, 1.0].min
+        bar_height = scaled * height
+        x = index * bar_width
+        y = height - bar_height
+        "<rect x='#{x.round(3)}' y='#{y.round(3)}' width='#{[bar_width, 0.1].max.round(3)}' height='#{bar_height.round(3)}' fill='#22d3ee' />"
+      end
+
+      svg = [
+        "<svg xmlns='http://www.w3.org/2000/svg' width='#{width.to_i}' height='#{height.to_i}' viewBox='0 0 #{width.to_i} #{height.to_i}'>",
+        "<rect width='100%' height='100%' fill='#111827' />",
+        "<g data-kind='onset' data-sr='#{sr}' data-hop-length='#{hop_length}'>",
+        bars.join,
         "</g>",
         "</svg>"
       ].join

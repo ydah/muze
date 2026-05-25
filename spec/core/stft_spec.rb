@@ -128,10 +128,20 @@ RSpec.describe Muze::Core::STFT do
       expect(Muze.samples_to_frames(5120, hop_length: 512)).to eq(10)
       expect(Muze.frames_to_time(10, sr:, hop_length: 512)).to be_within(1.0e-6).of(5120.0 / sr)
       expect(Muze.time_to_frames(5120.0 / sr, sr:, hop_length: 512)).to eq(10)
+      expect(Muze.samples_to_time(5120, sr:)).to be_within(1.0e-6).of(5120.0 / sr)
+      expect(Muze.time_to_samples(5120.0 / sr, sr:)).to eq(5120)
     end
 
     it "returns FFT frequency bins" do
       expect(Muze.fft_frequencies(sr: 8_000, n_fft: 8).to_a).to eq([0.0, 1000.0, 2000.0, 3000.0, 4000.0])
+    end
+  end
+
+  describe "validation" do
+    it "rejects unreasonably large FFT sizes" do
+      expect do
+        Muze.stft(signal, n_fft: Muze::Core::STFT::MAX_N_FFT + 2, hop_length: 512)
+      end.to raise_error(Muze::ParameterError, /n_fft/)
     end
   end
 end

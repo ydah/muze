@@ -5,6 +5,7 @@ require "numo/pocketfft"
 require_relative "muze/version"
 require_relative "muze/errors"
 require_relative "muze/native"
+require_relative "muze/core/audio"
 require_relative "muze/core/windows"
 require_relative "muze/core/matrix"
 require_relative "muze/core/frames"
@@ -17,6 +18,7 @@ require_relative "muze/filters/chroma_filter"
 require_relative "muze/feature/mfcc"
 require_relative "muze/feature/spectral"
 require_relative "muze/feature/chroma"
+require_relative "muze/feature/aggregation"
 require_relative "muze/feature/context"
 require_relative "muze/onset/onset_detect"
 require_relative "muze/beat/beat_track"
@@ -136,6 +138,31 @@ module Muze
       Muze::Core::STFT.samples_to_frames(samples, hop_length:)
     end
 
+    # @return [Float, Numo::SFloat]
+    def samples_to_time(samples, sr:)
+      Muze::Core::STFT.samples_to_time(samples, sr:)
+    end
+
+    # @return [Integer, Numo::SFloat]
+    def time_to_samples(times, sr:)
+      Muze::Core::STFT.time_to_samples(times, sr:)
+    end
+
+    # @return [Boolean]
+    def valid_audio?(y, allow_empty: false)
+      Muze::Core::Audio.valid_audio?(y, allow_empty:)
+    end
+
+    # @return [Numo::SFloat]
+    def normalize(y, peak: 1.0, axis: nil)
+      Muze::Core::Audio.normalize(y, peak:, axis:)
+    end
+
+    # @return [Numo::SFloat]
+    def remix(y, intervals, units: :samples, sr: nil, hop_length: 512)
+      Muze::Core::Audio.remix(y, intervals, units:, sr:, hop_length:)
+    end
+
     # @param y [Numo::SFloat, Array<Float>]
     # @param orig_sr [Integer]
     # @param target_sr [Integer]
@@ -206,6 +233,11 @@ module Muze
     # @return [Hash]
     def features(y:, sr: 22_050, features: Muze::Feature::Context::DEFAULT_FEATURES, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
       Muze::Feature.extract(y:, sr:, features:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def beat_sync(data, beats:, aggregate: :mean)
+      Muze::Feature.beat_sync(data, beats:, aggregate:)
     end
 
     # @return [Numo::SFloat]
@@ -319,8 +351,8 @@ module Muze
     end
 
     # @return [Numo::SFloat]
-    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false)
-      Muze::Effects.time_stretch(y, rate:, n_fft:, hop_length:, method:, phase_lock:)
+    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false, force_phase_vocoder: false)
+      Muze::Effects.time_stretch(y, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:)
     end
 
     # @return [Numo::SFloat]
@@ -344,13 +376,18 @@ module Muze
     end
 
     # @return [String]
-    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil)
-      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:, width:, height:, cmap:, vmin:, vmax:)
+    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil, fragment: false)
+      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:, width:, height:, cmap:, vmin:, vmax:, fragment:)
     end
 
     # @return [String]
     def waveshow(y, sr: 22_050, output: nil, width: 800, height: 240, normalize: true, channels: :overlay)
       Muze::Display.waveshow(y, sr:, output:, width:, height:, normalize:, channels:)
+    end
+
+    # @return [String]
+    def onsetshow(onset_envelope, sr: 22_050, hop_length: 512, output: nil, width: 800, height: 160, normalize: true)
+      Muze::Display.onsetshow(onset_envelope, sr:, hop_length:, output:, width:, height:, normalize:)
     end
   end
 end

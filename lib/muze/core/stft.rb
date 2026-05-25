@@ -5,6 +5,7 @@ module Muze
     # Short-time Fourier transform and related utilities.
     module STFT
       EPSILON = 1.0e-12
+      MAX_N_FFT = 262_144
       module_function
 
       # @param y [Numo::SFloat, Array<Float>] waveform signal
@@ -240,6 +241,7 @@ module Muze
 
       def validate_stft_params!(n_fft:, hop_length:, win_length:)
         raise Muze::ParameterError, "n_fft must be positive" if n_fft <= 0
+        raise Muze::ParameterError, "n_fft must be <= #{MAX_N_FFT}" if n_fft > MAX_N_FFT
         raise Muze::ParameterError, "n_fft must be even" unless n_fft.even?
         raise Muze::ParameterError, "hop_length must be positive" if hop_length <= 0
         raise Muze::ParameterError, "hop_length must be <= n_fft" if hop_length > n_fft
@@ -351,14 +353,12 @@ module Muze
 
         map_scalar_or_array(times) { |time| (time.to_f * sr).round }
       end
-      private_class_method :time_to_samples
 
       def samples_to_time(samples, sr:)
         raise Muze::ParameterError, "sr must be positive" unless sr.positive?
 
         map_scalar_or_array(samples) { |sample| sample.to_f / sr }
       end
-      private_class_method :samples_to_time
 
       def map_scalar_or_array(value)
         if value.is_a?(Numo::NArray)

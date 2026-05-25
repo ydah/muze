@@ -6,19 +6,24 @@ module Muze
 
     # Keep fast path for short clips where phase vocoder overhead dominates.
     MIN_PHASE_VOCODER_SAMPLES = 32_768
+    MIN_TIME_STRETCH_RATE = 1.0 / 32.0
+    MAX_TIME_STRETCH_RATE = 32.0
 
     # @param y [Numo::SFloat, Array<Float>]
     # @param rate [Float]
     # @return [Numo::SFloat]
-    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false)
+    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false, force_phase_vocoder: false)
       raise Muze::ParameterError, "rate must be positive" unless rate.positive?
+      unless rate.between?(MIN_TIME_STRETCH_RATE, MAX_TIME_STRETCH_RATE)
+        raise Muze::ParameterError, "rate must be between #{MIN_TIME_STRETCH_RATE} and #{MAX_TIME_STRETCH_RATE}"
+      end
       raise Muze::ParameterError, "method must be :phase_vocoder, :ola, :wsola, or :linear" unless %i[phase_vocoder ola wsola linear].include?(method)
 
       signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(Array(y))
-      return apply_channels(signal) { |channel| time_stretch(channel, rate:, n_fft:, hop_length:, method:, phase_lock:) } if signal.ndim == 2
+      return apply_channels(signal) { |channel| time_stretch(channel, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:) } if signal.ndim == 2
       return signal if signal.empty? || rate == 1.0
       return linear_time_stretch(signal.to_a, rate) if method == :linear
-      return ola_time_stretch(signal.to_a, rate) if %i[ola wsola].include?(method) || signal.size < MIN_PHASE_VOCODER_SAMPLES
+      return ola_time_stretch(signal.to_a, rate) if %i[ola wsola].include?(method) || (!force_phase_vocoder && signal.size < MIN_PHASE_VOCODER_SAMPLES)
 
       n_fft ||= phase_vocoder_fft_size(signal.size)
       hop_length ||= [n_fft / 4, 1].max

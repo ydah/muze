@@ -54,6 +54,19 @@ RSpec.describe Muze::Effects do
       expect(locked.size).to be_within(1).of((long_signal.size / 1.5).round)
     end
 
+    it "can force phase vocoder for short clips" do
+      short = signal[0...4096]
+      stretched = described_class.time_stretch(short, rate: 1.25, force_phase_vocoder: true)
+
+      expect(stretched.size).to be_within(1).of((short.size / 1.25).round)
+    end
+
+    it "rejects extreme rates" do
+      expect do
+        described_class.time_stretch(signal, rate: 100.0)
+      end.to raise_error(Muze::ParameterError, /rate/)
+    end
+
     it "processes multi-channel input" do
       stereo = Numo::SFloat.zeros(signal.size, 2)
       stereo[true, 0] = signal

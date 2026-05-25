@@ -31,6 +31,14 @@ RSpec.describe Muze::Display do
       expect(svg).to include("data-y-axis='mel'")
       expect(svg).to include("width='320'")
     end
+
+    it "can return only the SVG fragment" do
+      data = Numo::SFloat.new(4, 4).rand
+      fragment = described_class.specshow(data, fragment: true)
+
+      expect(fragment).to start_with("<g ")
+      expect(fragment).not_to include("<svg")
+    end
   end
 
   describe ".waveshow" do
@@ -51,6 +59,15 @@ RSpec.describe Muze::Display do
 
       expect(svg).to include("<path")
       expect(svg).to include("data-channels='split'")
+    end
+  end
+
+  describe ".onsetshow" do
+    it "renders an onset envelope as SVG bars" do
+      svg = described_class.onsetshow([0.0, 1.0, 0.5], sr: 22_050, hop_length: 512)
+
+      expect(svg).to include("data-kind='onset'")
+      expect(svg.scan("<rect").length).to be >= 4
     end
   end
 end

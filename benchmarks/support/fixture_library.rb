@@ -24,11 +24,17 @@ module Muze
           interval_seconds: 0.1
         )
         simple_mix = mixed_signal(sample_rate:, sample_count:)
+        silence = Array.new(sample_count, 0.0)
+        noise = deterministic_noise(sample_count:)
+        chirp = chirp_signal(sample_rate:, sample_count:, start_frequency: 120.0, end_frequency: 4_000.0)
 
         {
           "sine" => Numo::SFloat.cast(sine),
           "click" => Numo::SFloat.cast(click),
-          "simple_mix" => Numo::SFloat.cast(simple_mix)
+          "simple_mix" => Numo::SFloat.cast(simple_mix),
+          "silence" => Numo::SFloat.cast(silence),
+          "noise" => Numo::SFloat.cast(noise),
+          "chirp" => Numo::SFloat.cast(chirp)
         }
       end
 
@@ -90,6 +96,25 @@ module Muze
         )
       end
       private_class_method :mixed_signal
+
+      def deterministic_noise(sample_count:)
+        state = 0x1234abcd
+        Array.new(sample_count) do
+          state = ((1_103_515_245 * state) + 12_345) & 0x7fffffff
+          ((state / 0x7fffffff.to_f) * 2.0) - 1.0
+        end
+      end
+      private_class_method :deterministic_noise
+
+      def chirp_signal(sample_rate:, sample_count:, start_frequency:, end_frequency:)
+        duration = sample_count / sample_rate.to_f
+        Array.new(sample_count) do |index|
+          time = index / sample_rate.to_f
+          frequency = start_frequency + ((end_frequency - start_frequency) * time / [duration, 1.0e-12].max)
+          Math.sin(2.0 * Math::PI * frequency * time)
+        end
+      end
+      private_class_method :chirp_signal
 
       # @param signal [Array<Float>]
       # @param target_peak [Float]

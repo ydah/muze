@@ -28,5 +28,13 @@ RSpec.describe Muze::Core::Resample do
       error = (restored - original).abs.mean
       expect(error).to be < 0.02
     end
+
+    it "attenuates frequencies above the target Nyquist on downsample" do
+      original = sine(44_100, 15_000.0, 1.0)
+      down = described_class.resample(original, orig_sr: 44_100, target_sr: 22_050, res_type: :sinc)
+      rms = Math.sqrt((down**2).mean.to_f)
+
+      expect(rms).to be < 0.02
+    end
   end
 end
