@@ -3,7 +3,7 @@
 module Muze
   module Filters
     module_function
-    CHROMA_CACHE = {}
+    CHROMA_CACHE = Muze::Core::BoundedCache.new(max_size: 64)
 
     # @param sr [Integer]
     # @param n_fft [Integer]
@@ -12,7 +12,7 @@ module Muze
     # @return [Numo::SFloat] shape: [n_chroma, 1 + n_fft/2]
     def chroma(sr:, n_fft:, n_chroma: 12, tuning: 0.0, ctroct: nil, octwidth: nil)
       key = [sr, n_fft, n_chroma, tuning, ctroct, octwidth]
-      (CHROMA_CACHE[key] ||= build_chroma(sr:, n_fft:, n_chroma:, tuning:, ctroct:, octwidth:)).dup
+      CHROMA_CACHE.fetch(key) { build_chroma(sr:, n_fft:, n_chroma:, tuning:, ctroct:, octwidth:) }.dup
     end
 
     def build_chroma(sr:, n_fft:, n_chroma:, tuning:, ctroct:, octwidth:)

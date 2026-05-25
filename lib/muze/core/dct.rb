@@ -4,7 +4,7 @@ module Muze
   module Core
     # DCT utilities.
     module DCT
-      BASIS_CACHE = {}
+      BASIS_CACHE = Muze::Core::BoundedCache.new(max_size: 64)
       module_function
 
       # @param x [Numo::NArray]
@@ -41,7 +41,7 @@ module Muze
 
       def basis_matrix(rows:, cols:, norm:)
         key = [rows, cols, norm]
-        (BASIS_CACHE[key] ||= begin
+        BASIS_CACHE.fetch(key) do
           matrix = Numo::SFloat.zeros(rows, cols)
           rows.times do |row|
             cols.times do |col|
@@ -50,7 +50,7 @@ module Muze
             end
           end
           matrix
-        end)
+        end
       end
       private_class_method :basis_matrix
 

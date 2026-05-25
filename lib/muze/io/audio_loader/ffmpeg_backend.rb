@@ -123,7 +123,7 @@ module Muze
         # @param duration [Float, nil]
         # @return [Array<Float>, Array<Array<Float>>]
         def decode_samples(path, channels, offset:, duration:)
-          raw_samples, stderr, status = capture_binary_with_timeout(
+          floats, stderr, status = stream_float32le_with_timeout(
             "ffmpeg",
             "-v", "error",
             "-nostdin",
@@ -142,7 +142,6 @@ module Muze
             raise Muze::AudioLoadError, "ffmpeg failed for #{path}: #{stderr.strip}"
           end
 
-          floats = raw_samples.unpack("e*")
           return floats if channels == 1
 
           unless (floats.length % channels).zero?
@@ -170,32 +169,57 @@ module Muze
         end
         private_class_method :capture_with_timeout
 
-        def capture_binary_with_timeout(*command)
-          stdout_data = +""
+        def stream_float32le_with_timeout(*command)
+          floats = []
           stderr_data = +""
           status = nil
+          wait_thread = nil
+          reader_error = nil
+          leftover = +"".b
+
           Timeout.timeout(DEFAULT_TIMEOUT_SECONDS) do
-            Open3.popen3(*command) do |stdin, stdout, stderr, wait_thread|
+            Open3.popen3(*command) do |stdin, stdout, stderr, process_wait|
+              wait_thread = process_wait
               stdin.close
               stdout.binmode
               reader = Thread.new do
                 until stdout.eof?
-                  stdout_data << stdout.readpartial(16 * 1024)
+                  data = leftover + stdout.readpartial(16 * 1024)
+                  whole_bytes = data.bytesize - (data.bytesize % 4)
+                  floats.concat(data.byteslice(0, whole_bytes).unpack("e*")) if whole_bytes.positive?
+                  leftover = data.byteslice(whole_bytes, data.bytesize - whole_bytes) || +"".b
                 end
               rescue EOFError
                 nil
+              rescue StandardError => e
+                reader_error = e
               end
               stderr_reader = Thread.new { stderr_data << stderr.read.to_s }
               reader.join
               stderr_reader.join
-              status = wait_thread.value
+              raise reader_error if reader_error
+              raise Muze::AudioLoadError, "ffmpeg emitted a partial f32 sample" unless leftover.empty?
+
+              status = process_wait.value
             end
           end
-          [stdout_data, stderr_data, status]
+          [floats, stderr_data, status]
         rescue Timeout::Error
+          terminate_process(wait_thread)
           raise Muze::AudioLoadError, "#{command.first} timed out after #{DEFAULT_TIMEOUT_SECONDS}s"
         end
-        private_class_method :capture_binary_with_timeout
+        private_class_method :stream_float32le_with_timeout
+
+        def terminate_process(wait_thread)
+          return unless wait_thread&.pid
+
+          Process.kill("TERM", wait_thread.pid)
+          wait_thread.join(0.2)
+          Process.kill("KILL", wait_thread.pid) if wait_thread.alive?
+        rescue Errno::ESRCH
+          nil
+        end
+        private_class_method :terminate_process
 
         # @param command [String]
         # @return [Boolean]

@@ -50,5 +50,12 @@ RSpec.describe Muze::Core::Windows do
       expect(described_class.resolve(:tukey, 8).size).to eq(8)
       expect(described_class.resolve(:blackman_harris, 8).size).to eq(8)
     end
+
+    it "returns a copy of cached symbol windows" do
+      first = described_class.resolve(:hann, 8)
+      first[0] = 1.0
+
+      expect(described_class.resolve(:hann, 8)[0]).to be_within(1.0e-6).of(0.0)
+    end
   end
 end

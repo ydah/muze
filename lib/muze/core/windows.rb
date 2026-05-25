@@ -4,7 +4,7 @@ module Muze
   module Core
     # Window function generators for short-time analysis.
     module Windows
-      CACHE = {}
+      CACHE = Muze::Core::BoundedCache.new(max_size: 64)
       module_function
 
       # @param n [Integer]
@@ -108,7 +108,7 @@ module Muze
                    when Numo::NArray then Numo::SFloat.cast(name)
                    when Array then Numo::SFloat.cast(name)
                    when Proc then Numo::SFloat.cast(name.call(n))
-                   when Symbol then cached_symbol_window(name, n, periodic:)
+                   when Symbol then cached_symbol_window(name, n, periodic:).dup
                    else
                      raise Muze::ParameterError, "Unsupported window: #{name.inspect}"
                    end
@@ -120,17 +120,19 @@ module Muze
 
       def cached_symbol_window(name, n, periodic:)
         key = [name, n, periodic]
-        CACHE[key] ||= case name
-                       when :hann then hann(n, periodic:)
-                       when :hamming then hamming(n, periodic:)
-                       when :blackman then blackman(n, periodic:)
-                       when :blackman_harris, :blackmanharris then blackman_harris(n, periodic:)
-                       when :kaiser then kaiser(n, periodic:)
-                       when :tukey then tukey(n, periodic:)
-                       when :ones, :boxcar, :rect then ones(n)
-                       else
-                         raise Muze::ParameterError, "Unsupported window: #{name}"
-                       end
+        CACHE.fetch(key) do
+          case name
+          when :hann then hann(n, periodic:)
+          when :hamming then hamming(n, periodic:)
+          when :blackman then blackman(n, periodic:)
+          when :blackman_harris, :blackmanharris then blackman_harris(n, periodic:)
+          when :kaiser then kaiser(n, periodic:)
+          when :tukey then tukey(n, periodic:)
+          when :ones, :boxcar, :rect then ones(n)
+          else
+            raise Muze::ParameterError, "Unsupported window: #{name}"
+          end
+        end
       end
       private_class_method :cached_symbol_window
 

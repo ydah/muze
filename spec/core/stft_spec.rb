@@ -142,6 +142,14 @@ RSpec.describe Muze::Core::STFT do
 
       expect(flushed.shape[1]).to be > unflushed.shape[1]
     end
+
+    it "does not materialize the chunk enumerable" do
+      chunks = no_to_a_enumerable([signal[0...700], signal[700...1501]])
+
+      matrices = Muze.stft_stream(chunks, n_fft: 256, hop_length: 128, flush: false)
+
+      expect(matrices.length).to eq(2)
+    end
   end
 
   describe "dB conversion" do
@@ -226,5 +234,14 @@ RSpec.describe Muze::Core::STFT do
       offset += width
     end
     output
+  end
+
+  def no_to_a_enumerable(chunks)
+    Class.new do
+      include Enumerable
+
+      define_method(:each) { |&block| chunks.each(&block) }
+      define_method(:to_a) { raise "stft_stream should not materialize chunks" }
+    end.new
   end
 end

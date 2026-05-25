@@ -6,7 +6,7 @@ module Muze
     module STFT
       EPSILON = 1.0e-12
       MAX_N_FFT = 262_144
-      FREQUENCY_CACHE = {}
+      FREQUENCY_CACHE = Muze::Core::BoundedCache.new(max_size: 64)
       module_function
 
       # @param y [Numo::SFloat, Array<Float>] waveform signal
@@ -27,18 +27,21 @@ module Muze
         signal = pad_signal(signal, n_fft / 2, pad_mode) if center
         signal = signal.empty? ? [0.0] : signal
 
-        frames = Muze::Core::Frames.slice(signal, frame_length: n_fft, hop_length:, pad_end:)
         window_values = Muze::Core::Windows.resolve(window, win_length, periodic:).to_a
         window_offset = (n_fft - win_length) / 2
+        frame_count = analysis_frame_count(signal.length, n_fft:, hop_length:, pad_end:)
 
         frequency_bins = (n_fft / 2) + 1
-        stft_matrix = Numo::DComplex.zeros(frequency_bins, frames.length)
+        stft_matrix = Numo::DComplex.zeros(frequency_bins, frame_count)
 
-        frames.each_with_index do |frame, frame_index|
+        frame_count.times do |frame_index|
+          frame_start = frame_index * hop_length
           windowed = Array.new(n_fft, 0.0)
           win_length.times do |index|
             frame_index_in_window = index + window_offset
-            windowed[frame_index_in_window] = frame[frame_index_in_window] * window_values[index]
+            source_index = frame_start + frame_index_in_window
+            sample = source_index < signal.length ? signal[source_index] : 0.0
+            windowed[frame_index_in_window] = sample * window_values[index]
           end
 
           spectrum = fft_real(windowed)
@@ -122,20 +125,30 @@ module Muze
         validate_stft_params!(n_fft:, hop_length:, win_length:)
         raise Muze::ParameterError, "flush must be true or false" unless [true, false].include?(flush)
 
-        chunk_list = chunks.to_a
         buffer = []
-        chunk_list.each_with_index.map do |chunk, index|
-          final = index == chunk_list.length - 1
+        results = []
+        sentinel = Object.new
+        enumerator = chunks.each
+        chunk = next_stream_chunk(enumerator, sentinel)
+
+        until chunk.equal?(sentinel)
+          following = next_stream_chunk(enumerator, sentinel)
+          final = following.equal?(sentinel)
           buffer.concat(signal_to_a(chunk))
           frame_count = stream_frame_count(buffer.length, n_fft:, hop_length:, final: final && flush)
-          next empty_stft_matrix(n_fft) if frame_count.zero?
-
-          matrix = stft(buffer, n_fft:, hop_length:, win_length:, window:, center: false, pad_end: final && flush, periodic:)
-          emitted = matrix.shape[1]
-          consumed = final && flush ? buffer.length : emitted * hop_length
-          buffer = buffer[consumed..] || []
-          matrix
+          results << if frame_count.zero?
+                       empty_stft_matrix(n_fft)
+                     else
+                       matrix = stft(buffer, n_fft:, hop_length:, win_length:, window:, center: false, pad_end: final && flush, periodic:)
+                       emitted = matrix.shape[1]
+                       consumed = final && flush ? buffer.length : emitted * hop_length
+                       buffer = buffer[consumed..] || []
+                       matrix
+                     end
+          chunk = following
         end
+
+        results
       end
 
       # @param s [Numo::NArray]
@@ -188,7 +201,7 @@ module Muze
         raise Muze::ParameterError, "n_fft must be a positive integer" unless n_fft.is_a?(Integer) && n_fft.positive?
 
         key = [sr, n_fft]
-        (FREQUENCY_CACHE[key] ||= Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft })).dup
+        FREQUENCY_CACHE.fetch(key) { Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft }) }.dup
       end
 
       # @param frames [Integer, Array<Integer>, Numo::NArray]
@@ -244,6 +257,21 @@ module Muze
         Numo::DComplex.zeros((n_fft / 2) + 1, 0)
       end
       private_class_method :empty_stft_matrix
+
+      def next_stream_chunk(enumerator, sentinel)
+        enumerator.next
+      rescue StopIteration
+        sentinel
+      end
+      private_class_method :next_stream_chunk
+
+      def analysis_frame_count(length, n_fft:, hop_length:, pad_end:)
+        return 1 if length <= n_fft
+        return (((length - n_fft).to_f / hop_length).ceil + 1) if pad_end
+
+        ((length - n_fft) / hop_length) + 1
+      end
+      private_class_method :analysis_frame_count
 
       def log_scale(values, ref:, amin:, top_db:, multiplier:)
         raise Muze::ParameterError, "amin must be positive" unless amin.positive?

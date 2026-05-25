@@ -4,7 +4,7 @@ module Muze
   # Filterbank generation utilities.
   module Filters
     module_function
-    MEL_CACHE = {}
+    MEL_CACHE = Muze::Core::BoundedCache.new(max_size: 64)
 
     # @param sr [Integer]
     # @param n_fft [Integer]
@@ -16,7 +16,7 @@ module Muze
     # @return [Numo::SFloat] shape: [n_mels, 1 + n_fft/2]
     def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false, norm: nil)
       key = [sr, n_fft, n_mels, fmin, fmax, htk, norm]
-      (MEL_CACHE[key] ||= build_mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:, norm:)).dup
+      MEL_CACHE.fetch(key) { build_mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:, norm:) }.dup
     end
 
     # @param n_mels [Integer]
