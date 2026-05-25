@@ -51,6 +51,20 @@ module Muze
           [samples_from_interleaved(samples, float_format.channels), float_format.sample_rate, float_format.channels]
         end
 
+        # @yieldparam samples [Array<Float>, Array<Array<Float>>]
+        # @yieldparam sample_rate [Integer]
+        # @yieldparam channels [Integer]
+        # @return [void]
+        def read_stream(path, chunk_frames:, offset: 0.0, duration: nil)
+          metadata = Wavify::Codecs::Wav.metadata(path)
+          source_format = metadata.fetch(:format)
+          float_format = source_format.with(sample_format: :float, bit_depth: 32)
+
+          stream_sample_chunks(path, float_format:, offset:, duration:, chunk_frames:) do |samples|
+            yield samples_from_interleaved(samples, float_format.channels), float_format.sample_rate, float_format.channels
+          end
+        end
+
         # @param path [String]
         # @return [Hash]
         def info(path)
@@ -92,6 +106,38 @@ module Muze
           samples
         end
         private_class_method :stream_samples
+
+        def stream_sample_chunks(path, float_format:, offset:, duration:, chunk_frames:)
+          start_frame = (offset * float_format.sample_rate).floor
+          end_frame = duration ? start_frame + (duration * float_format.sample_rate).floor : nil
+          current_frame = 0
+          chunk_samples = [chunk_frames * float_format.channels, 1].max
+          pending = []
+
+          Wavify::Codecs::Wav.stream_read(path) do |chunk|
+            converted = chunk.format == float_format ? chunk : chunk.convert(float_format)
+            chunk_frames_count = converted.sample_frame_count
+            chunk_start = current_frame
+            chunk_end = current_frame + chunk_frames_count
+            copy_start = [start_frame, chunk_start].max
+            copy_end = end_frame ? [end_frame, chunk_end].min : chunk_end
+
+            if copy_start < copy_end
+              local_start = copy_start - chunk_start
+              local_length = copy_end - copy_start
+              pending.concat(converted.slice(local_start, local_length).samples)
+              while pending.length >= chunk_samples
+                yield pending.shift(chunk_samples)
+              end
+            end
+
+            current_frame = chunk_end
+            break if end_frame && current_frame >= end_frame
+          end
+
+          yield pending unless pending.empty?
+        end
+        private_class_method :stream_sample_chunks
 
         # @return [Array<Float>, Array<Array<Float>>]
         def samples_from_interleaved(samples, channels)

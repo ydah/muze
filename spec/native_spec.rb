@@ -19,6 +19,23 @@ RSpec.describe Muze::Native do
     end
   end
 
+  describe ".median_filter1d" do
+    it "matches the sliding upper median used by HPSS" do
+      values = [4.0, 1.0, 9.0, 2.0, 3.0]
+
+      expect(described_class.median_filter1d(values, 1)).to eq([1.0, 9.0, 2.0, 3.0, 3.0])
+    end
+
+    it "validates filter arguments" do
+      expect do
+        described_class.median_filter1d("bad", 1)
+      end.to raise_error(Muze::ParameterError, /Array/)
+      expect do
+        described_class.median_filter1d([1.0], -1)
+      end.to raise_error(Muze::ParameterError, /half/)
+    end
+  end
+
   describe ".frame_slices" do
     it "matches Core::Frames slicing for unpadded frames" do
       native = described_class.frame_slices([1, 2, 3, 4, 5], 3, 2)

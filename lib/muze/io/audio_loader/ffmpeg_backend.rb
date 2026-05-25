@@ -54,6 +54,19 @@ module Muze
           [decode_samples(path, channels, offset:, duration:), source_sr, channels]
         end
 
+        # @yieldparam samples [Array<Float>, Array<Array<Float>>]
+        # @yieldparam sample_rate [Integer]
+        # @yieldparam channels [Integer]
+        # @return [void]
+        def read_stream(path, chunk_frames:, offset: 0.0, duration: nil)
+          raise Muze::DependencyError, installation_message(File.extname(path).downcase) unless available?
+
+          source_sr, channels = probe_stream(path)
+          stream_decoded_samples(path, source_sr:, channels:, chunk_frames:, offset:, duration:) do |samples|
+            yield samples, source_sr, channels
+          end
+        end
+
         # @param path [String]
         # @return [Hash]
         def info(path)
@@ -152,6 +165,46 @@ module Muze
         end
         private_class_method :decode_samples
 
+        def stream_decoded_samples(path, source_sr:, channels:, chunk_frames:, offset:, duration:)
+          pending = []
+          frame_sample_count = [chunk_frames * channels, 1].max
+          _, stderr, status = stream_float32le_with_timeout(
+            "ffmpeg",
+            "-v", "error",
+            "-nostdin",
+            *seek_args(offset),
+            "-i", path,
+            "-map", "0:a:0",
+            "-vn",
+            "-sn",
+            *duration_args(duration),
+            "-f", "f32le",
+            "-acodec", "pcm_f32le",
+            "pipe:1"
+          ) do |floats|
+            pending.concat(floats)
+            while pending.length >= frame_sample_count
+              yield samples_from_floats(pending.shift(frame_sample_count), channels)
+            end
+          end
+
+          unless status.success?
+            raise Muze::AudioLoadError, "ffmpeg failed for #{path}: #{stderr.strip}"
+          end
+
+          raise Muze::AudioLoadError, "Decoded samples are not divisible by channels (#{pending.length} / #{channels})" unless (pending.length % channels).zero?
+
+          yield samples_from_floats(pending, channels) unless pending.empty?
+        end
+        private_class_method :stream_decoded_samples
+
+        def samples_from_floats(floats, channels)
+          return floats if channels == 1
+
+          floats.each_slice(channels).map(&:dup)
+        end
+        private_class_method :samples_from_floats
+
         def seek_args(offset)
           offset.positive? ? ["-ss", offset.to_s] : []
         end
@@ -170,7 +223,7 @@ module Muze
         private_class_method :capture_with_timeout
 
         def stream_float32le_with_timeout(*command)
-          floats = []
+          floats = block_given? ? nil : []
           stderr_data = +""
           status = nil
           wait_thread = nil
@@ -186,7 +239,8 @@ module Muze
                 until stdout.eof?
                   data = leftover + stdout.readpartial(16 * 1024)
                   whole_bytes = data.bytesize - (data.bytesize % 4)
-                  floats.concat(data.byteslice(0, whole_bytes).unpack("e*")) if whole_bytes.positive?
+                  decoded = whole_bytes.positive? ? data.byteslice(0, whole_bytes).unpack("e*") : []
+                  block_given? ? yield(decoded) : floats.concat(decoded)
                   leftover = data.byteslice(whole_bytes, data.bytesize - whole_bytes) || +"".b
                 end
               rescue EOFError

@@ -120,34 +120,8 @@ module Muze
     private_class_method :median_filter
 
     def sliding_median(values, half)
-      return [] if values.empty?
-
-      window = []
-      output = Array.new(values.length, 0.0)
-      values.length.times do |index|
-        remove_value(window, values[index - half - 1]) if index > half
-        entering = index + half
-        insert_value(window, values[entering]) if entering < values.length
-        output[index] = window[window.length / 2].to_f
-      end
-
-      output
+      Muze::Native.median_filter1d(values, half)
     end
     private_class_method :sliding_median
-
-    def insert_value(sorted, value)
-      index = sorted.bsearch_index { |item| item > value } || sorted.length
-      sorted.insert(index, value)
-    end
-    private_class_method :insert_value
-
-    def remove_value(sorted, value)
-      index = sorted.bsearch_index { |item| item >= value }
-      return unless index
-
-      index += 1 while index < sorted.length && sorted[index] != value
-      sorted.delete_at(index) if index < sorted.length
-    end
-    private_class_method :remove_value
   end
 end

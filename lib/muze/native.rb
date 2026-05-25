@@ -53,6 +53,26 @@ module Muze
         quickselect!(copy, copy.length / 2)
       end
 
+      # @param values [Array<Float>]
+      # @param half [Integer]
+      # @return [Array<Float>]
+      def median_filter1d(values, half)
+        raise Muze::ParameterError, "values must be an Array" unless values.is_a?(Array)
+        raise Muze::ParameterError, "half must be non-negative" unless half.is_a?(Integer) && half >= 0
+        return [] if values.empty?
+
+        window = []
+        output = Array.new(values.length, 0.0)
+        values.length.times do |index|
+          remove_sorted_value(window, values[index - half - 1]) if index > half
+          entering = index + half
+          insert_sorted_value(window, values[entering]) if entering < values.length
+          output[index] = window[window.length / 2].to_f
+        end
+
+        output
+      end
+
       def quickselect!(values, target)
         left = 0
         right = values.length - 1
@@ -88,6 +108,21 @@ module Muze
         store_index
       end
       private_class_method :partition!
+
+      def insert_sorted_value(sorted, value)
+        index = sorted.bsearch_index { |item| item > value } || sorted.length
+        sorted.insert(index, value)
+      end
+      private_class_method :insert_sorted_value
+
+      def remove_sorted_value(sorted, value)
+        index = sorted.bsearch_index { |item| item >= value }
+        return unless index
+
+        index += 1 while index < sorted.length && sorted[index] != value
+        sorted.delete_at(index) if index < sorted.length
+      end
+      private_class_method :remove_sorted_value
     end
   end
 end

@@ -26,6 +26,7 @@ require_relative "muze/onset/onset_detect"
 require_relative "muze/beat/beat_track"
 require_relative "muze/effects/harmonic_percussive"
 require_relative "muze/effects/time_stretch"
+require_relative "muze/effects/streaming"
 require_relative "muze/display/specshow"
 
 # Main entrypoint for Muze API.
@@ -41,6 +42,11 @@ module Muze
     # @return [Array(Numo::SFloat, Integer)]
     def load(path, sr: 22_050, mono: true, offset: 0.0, duration: nil, dtype: Numo::SFloat, normalize: false, format: nil, weights: nil, max_bytes: nil)
       Muze::IO::AudioLoader.load(path, sr:, mono:, offset:, duration:, dtype:, normalize:, format:, weights:, max_bytes:)
+    end
+
+    # @return [Enumerator, nil]
+    def load_stream(path, sr: nil, mono: true, offset: 0.0, duration: nil, dtype: Numo::SFloat, format: nil, weights: nil, max_bytes: nil, chunk_frames: 16_384, &block)
+      Muze::IO::AudioLoader.load_stream(path, sr:, mono:, offset:, duration:, dtype:, format:, weights:, max_bytes:, chunk_frames:, &block)
     end
 
     # @return [Hash]
@@ -362,14 +368,29 @@ module Muze
       Muze::Effects.hpss(y, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)
     end
 
+    # @return [Enumerator, nil]
+    def hpss_stream(chunks, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512, overlap: n_fft, &block)
+      Muze::Effects.hpss_stream(chunks, kernel_size:, power:, margin:, n_fft:, hop_length:, overlap:, &block)
+    end
+
     # @return [Numo::SFloat]
     def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false, force_phase_vocoder: false)
       Muze::Effects.time_stretch(y, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:)
     end
 
+    # @return [Enumerator, nil]
+    def time_stretch_stream(chunks, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder, phase_lock: false, force_phase_vocoder: false, overlap: 2048, &block)
+      Muze::Effects.time_stretch_stream(chunks, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:, overlap:, &block)
+    end
+
     # @return [Numo::SFloat]
     def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto, normalize: false, clip: nil)
       Muze::Effects.pitch_shift(y, sr:, n_steps:, bins_per_octave:, res_type:, normalize:, clip:)
+    end
+
+    # @return [Enumerator, nil]
+    def pitch_shift_stream(chunks, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto, normalize: false, clip: nil, overlap: 2048, &block)
+      Muze::Effects.pitch_shift_stream(chunks, sr:, n_steps:, bins_per_octave:, res_type:, normalize:, clip:, overlap:, &block)
     end
 
     # @return [Array(Numo::SFloat, Array<Integer>)]

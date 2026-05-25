@@ -81,5 +81,15 @@ RSpec.describe Muze::Effects do
       expect(harmonic_masks.length).to eq(2)
       expect(percussive_masks.length).to eq(2)
     end
+
+    it "streams harmonic and percussive chunks" do
+      signal = mixed_signal
+      chunks = [signal[0...4096], signal[4096...8192]]
+      streamed = described_class.hpss_stream(chunks, kernel_size: 9, n_fft: 512, hop_length: 128, overlap: 256).to_a
+
+      expect(streamed.length).to eq(2)
+      expect(streamed.sum { |harmonic, _percussive| harmonic.size }).to eq(chunks.sum(&:size))
+      expect(streamed.all? { |harmonic, percussive| harmonic.size == percussive.size }).to be(true)
+    end
   end
 end

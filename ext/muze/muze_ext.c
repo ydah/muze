@@ -1,5 +1,6 @@
 #include "ruby.h"
 #include "ruby/thread.h"
+#include <string.h>
 
 static VALUE mMuze;
 static VALUE mNative;
@@ -129,10 +130,63 @@ static VALUE native_median1d(VALUE self, VALUE rb_values) {
   return DBL2NUM(args.result);
 }
 
+static void insert_sorted_double(double *values, long *length, double value) {
+  long index = 0;
+  while (index < *length && values[index] <= value) index++;
+  memmove(values + index + 1, values + index, sizeof(double) * (*length - index));
+  values[index] = value;
+  (*length)++;
+}
+
+static void remove_sorted_double(double *values, long *length, double value) {
+  long index = 0;
+  while (index < *length && values[index] < value) index++;
+  while (index < *length && values[index] != value) index++;
+  if (index >= *length) return;
+
+  memmove(values + index, values + index + 1, sizeof(double) * (*length - index - 1));
+  (*length)--;
+}
+
+static VALUE native_median_filter1d(VALUE self, VALUE rb_values, VALUE rb_half) {
+  if (!RB_TYPE_P(rb_values, T_ARRAY)) {
+    rb_raise(muze_parameter_error(), "values must be an Array");
+  }
+
+  const long count = RARRAY_LEN(rb_values);
+  const long half = NUM2LONG(rb_half);
+  if (half < 0) {
+    rb_raise(muze_parameter_error(), "half must be non-negative");
+  }
+
+  VALUE output = rb_ary_new2(count);
+  if (count == 0) return output;
+
+  double *window = ALLOC_N(double, count);
+  long window_length = 0;
+
+  for (long index = 0; index < count; index++) {
+    if (index > half) {
+      remove_sorted_double(window, &window_length, NUM2DBL(rb_ary_entry(rb_values, index - half - 1)));
+    }
+
+    const long entering = index + half;
+    if (entering < count) {
+      insert_sorted_double(window, &window_length, NUM2DBL(rb_ary_entry(rb_values, entering)));
+    }
+
+    rb_ary_push(output, DBL2NUM(window_length == 0 ? 0.0 : window[window_length / 2]));
+  }
+
+  xfree(window);
+  return output;
+}
+
 void Init_muze_ext(void) {
   mMuze = rb_define_module("Muze");
   mNative = rb_define_module_under(mMuze, "Native");
 
   rb_define_singleton_method(mNative, "frame_slices", native_frame_slices, 3);
   rb_define_singleton_method(mNative, "median1d", native_median1d, 1);
+  rb_define_singleton_method(mNative, "median_filter1d", native_median_filter1d, 2);
 }

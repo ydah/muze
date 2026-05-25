@@ -97,6 +97,15 @@ RSpec.describe Muze::Effects do
 
       expect(stretched.shape).to eq([signal.size / 2, 2])
     end
+
+    it "streams chunks with overlap" do
+      chunks = [signal[0...5000], signal[5000...10_000], signal[10_000...15_000]]
+      streamed = described_class.time_stretch_stream(chunks, rate: 2.0, method: :linear, overlap: 256).to_a
+
+      expect(streamed.length).to eq(3)
+      expect(streamed.sum(&:size)).to be_within(3).of(chunks.sum(&:size) / 2)
+      expect(streamed.all? { |chunk| chunk.to_a.all?(&:finite?) }).to be(true)
+    end
   end
 
   describe ".pitch_shift" do
@@ -163,6 +172,14 @@ RSpec.describe Muze::Effects do
       shifted = described_class.pitch_shift(stereo, sr:, n_steps: 0.5)
 
       expect(shifted.shape).to eq(stereo.shape)
+    end
+
+    it "streams pitch shifted chunks" do
+      chunks = [signal[0...4096], signal[4096...8192]]
+      streamed = described_class.pitch_shift_stream(chunks, sr:, n_steps: 1.0, overlap: 256).to_a
+
+      expect(streamed.length).to eq(2)
+      expect(streamed.sum(&:size)).to eq(chunks.sum(&:size))
     end
   end
 

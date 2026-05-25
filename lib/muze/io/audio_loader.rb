@@ -51,6 +51,35 @@ module Muze
       end
 
       # @param path [String, Pathname, IO]
+      # @param chunk_frames [Integer]
+      # @yieldparam chunk [Numo::SFloat, Numo::DFloat]
+      # @yieldparam sample_rate [Integer]
+      # @return [Enumerator, nil]
+      def load_stream(path, sr: nil, mono: true, offset: 0.0, duration: nil, dtype: Numo::SFloat, format: nil, weights: nil, max_bytes: nil, chunk_frames: 16_384)
+        return enum_for(__method__, path, sr:, mono:, offset:, duration:, dtype:, format:, weights:, max_bytes:, chunk_frames:) unless block_given?
+
+        source = resolve_source(path, format:)
+        validate_args!(sr:, mono:, offset:, duration:, dtype:, normalize: false, weights:, max_bytes:)
+        validate_stream_args!(chunk_frames:)
+        validate_source_size!(source, max_bytes:)
+
+        backend = select_backend(source)
+        backend.read_stream(source.fetch(:input), chunk_frames:, offset:, duration:) do |raw_samples, source_sr, _channels|
+          target_sr = sr || source_sr
+          signal = downmix(raw_samples, mono:, weights:)
+          resampled = resample(signal, source_sr, target_sr)
+          yield cast_signal(resampled, dtype), target_sr unless resampled.empty?
+        end
+        nil
+      rescue Muze::AudioLoadError, Muze::ParameterError
+        raise
+      rescue Muze::UnsupportedFormatError, Muze::DependencyError => e
+        raise Muze::AudioLoadError, e.message
+      rescue StandardError => e
+        raise Muze::AudioLoadError, "Failed to stream #{path}: #{e.message}"
+      end
+
+      # @param path [String, Pathname, IO]
       # @return [Hash]
       def info(path, format: nil)
         source = resolve_source(path, format:)
@@ -98,6 +127,13 @@ module Muze
         raise Muze::ParameterError, "duration must be positive"
       end
       private_class_method :validate_args!
+
+      def validate_stream_args!(chunk_frames:)
+        return if chunk_frames.is_a?(Integer) && chunk_frames.positive?
+
+        raise Muze::ParameterError, "chunk_frames must be a positive integer"
+      end
+      private_class_method :validate_stream_args!
 
       def validate_source_size!(source, max_bytes:)
         return unless max_bytes && source.fetch(:path?)

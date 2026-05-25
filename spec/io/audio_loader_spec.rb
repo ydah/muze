@@ -93,6 +93,22 @@ RSpec.describe Muze::IO::AudioLoader do
       expect(y.size).to be_within(1).of(11_025)
     end
 
+    it "streams WAV chunks through the public API" do
+      chunks = Muze.load_stream(mono_path, sr: nil, chunk_frames: 4096).to_a
+
+      expect(chunks.length).to be > 1
+      expect(chunks.map(&:last).uniq).to eq([44_100])
+      expect(chunks.sum { |chunk, _sr| chunk.size }).to eq(44_100)
+    end
+
+    it "streams WAV StringIO chunks with explicit format" do
+      io = StringIO.new(File.binread(mono_path))
+      chunks = Muze.load_stream(io, sr: 44_100, format: :wav, chunk_frames: 4096).to_a
+
+      expect(chunks.length).to be > 1
+      expect(chunks.sum { |chunk, _sr| chunk.size }).to eq(44_100)
+    end
+
     it "rejects files larger than max_bytes" do
       expect do
         Muze.load(mono_path, max_bytes: 1)
@@ -156,6 +172,10 @@ RSpec.describe Muze::IO::AudioLoader do
           expect(signal).to be_a(Numo::SFloat)
           expect(signal.size).to be_within(64).of(baseline_size), "unexpected output length for #{format}"
         end
+
+        streamed_chunks = Muze.load_stream(flac_path, sr: 44_100, chunk_frames: 4096).to_a
+        expect(streamed_chunks.length).to be > 1
+        expect(streamed_chunks.sum { |chunk, _sr| chunk.size }).to be_within(64).of(baseline_size)
       end
     end
 
