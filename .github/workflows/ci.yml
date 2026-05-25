@@ -28,5 +28,5 @@ jobs:
       - name: Run specs
         run: bundle exec rspec
       - name: Run benchmark regression guard
-        if: matrix.ruby == '3.3'
+        if: matrix.ruby == '4.0'
         run: bundle exec rake bench

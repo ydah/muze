@@ -51,6 +51,7 @@ module Muze
           generated_at: Time.now.utc.iso8601,
           ruby_version: RUBY_VERSION,
           ruby_platform: RUBY_PLATFORM,
+          native_extension_loaded: Muze::Native.extension_loaded?,
           fixture_names: fixtures.keys,
           baseline_path: baseline_path,
           metrics: metrics,

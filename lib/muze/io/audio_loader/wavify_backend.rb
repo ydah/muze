@@ -27,15 +27,41 @@ module Muze
           true
         end
 
+        # @return [Boolean]
+        def applies_time_window?
+          false
+        end
+
+        # @param extension [String]
+        # @return [String]
+        def installation_message(extension)
+          "Unable to load #{extension.delete_prefix('.')} because the WAV backend is unavailable."
+        end
+
         # @param path [String]
+        # @param offset [Float]
+        # @param duration [Float, nil]
         # @return [Array(Array<Float>, Integer, Integer)]
-        def read(path)
+        def read(path, offset: 0.0, duration: nil)
+          _ = [offset, duration]
           buffer = Wavify::Codecs::Wav.read(path)
           float_format = buffer.format.with(sample_format: :float, bit_depth: 32)
           converted = buffer.convert(float_format)
 
           samples = samples_from_buffer(converted)
           [samples, converted.format.sample_rate, converted.format.channels]
+        end
+
+        # @param path [String]
+        # @return [Hash]
+        def info(path)
+          buffer = Wavify::Codecs::Wav.read(path)
+          {
+            sample_rate: buffer.format.sample_rate,
+            channels: buffer.format.channels,
+            duration: buffer.duration.total_seconds,
+            format: File.extname(path).delete_prefix(".")
+          }
         end
 
         # @param buffer [Wavify::Core::SampleBuffer]

@@ -25,13 +25,20 @@ require_relative "muze/display/specshow"
 module Muze
   class << self
     # @param path [String]
-    # @param sr [Integer]
-    # @param mono [Boolean]
+    # @param sr [Integer, nil]
+    # @param mono [Boolean, Symbol]
     # @param offset [Float]
     # @param duration [Float, nil]
+    # @param dtype [Class, Symbol]
+    # @param normalize [Boolean]
     # @return [Array(Numo::SFloat, Integer)]
-    def load(path, sr: 22_050, mono: true, offset: 0.0, duration: nil)
-      Muze::IO::AudioLoader.load(path, sr:, mono:, offset:, duration:)
+    def load(path, sr: 22_050, mono: true, offset: 0.0, duration: nil, dtype: Numo::SFloat, normalize: false)
+      Muze::IO::AudioLoader.load(path, sr:, mono:, offset:, duration:, dtype:, normalize:)
+    end
+
+    # @return [Hash]
+    def info(path)
+      Muze::IO::AudioLoader.info(path)
     end
 
     # @param y [Numo::SFloat, Array<Float>]

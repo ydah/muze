@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "open3"
+require "pathname"
 require "tempfile"
 require "tmpdir"
 
@@ -33,10 +34,63 @@ RSpec.describe Muze::IO::AudioLoader do
       expect(y.size).to be_within(1).of(22_050)
     end
 
+    it "preserves source sample rate when sr is nil" do
+      y, sr = Muze.load(mono_path, sr: nil)
+
+      expect(sr).to eq(44_100)
+      expect(y.size).to eq(44_100)
+    end
+
     it "supports offset and duration" do
       y, _ = Muze.load(mono_path, sr: 44_100, offset: 0.25, duration: 0.5)
 
       expect(y.size).to be_within(1).of(22_050)
+    end
+
+    it "accepts Pathname input" do
+      y, sr = Muze.load(Pathname(mono_path), sr: 44_100)
+
+      expect(sr).to eq(44_100)
+      expect(y.size).to eq(44_100)
+    end
+
+    it "can return stereo channels without downmixing" do
+      y, _ = Muze.load(stereo_path, sr: 44_100, mono: false)
+
+      expect(y.shape).to eq([44_100, 2])
+    end
+
+    it "supports explicit left and right mono selection" do
+      left, = Muze.load(stereo_path, sr: 44_100, mono: :left)
+      right, = Muze.load(stereo_path, sr: 44_100, mono: :right)
+
+      expect(left.ndim).to eq(1)
+      expect(right.ndim).to eq(1)
+      expect(left.size).to eq(right.size)
+    end
+
+    it "supports dtype and peak normalization" do
+      y, = Muze.load(mono_path, sr: 44_100, dtype: :dfloat, normalize: true)
+
+      expect(y).to be_a(Numo::DFloat)
+      expect(y.abs.max).to be_within(1.0e-6).of(1.0)
+    end
+
+    it "reports audio metadata without loading through the public API" do
+      info = Muze.info(mono_path)
+
+      expect(info).to include(sample_rate: 44_100, channels: 1, format: "wav")
+      expect(info.fetch(:duration)).to be_within(1.0e-6).of(1.0)
+    end
+
+    it "lists .wave among supported formats" do
+      expect(described_class::SUPPORTED_FORMATS).to include("wave")
+    end
+
+    it "raises ParameterError for invalid arguments" do
+      expect do
+        Muze.load(mono_path, sr: 0)
+      end.to raise_error(Muze::ParameterError, /sr/)
     end
 
     it "raises AudioLoadError for missing file" do

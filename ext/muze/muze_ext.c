@@ -3,14 +3,26 @@
 static VALUE mMuze;
 static VALUE mNative;
 
+static VALUE muze_parameter_error(void) {
+  ID id = rb_intern("ParameterError");
+  if (rb_const_defined(mMuze, id)) {
+    return rb_const_get(mMuze, id);
+  }
+
+  return rb_eArgError;
+}
+
 static VALUE native_frame_slices(VALUE self, VALUE rb_signal, VALUE rb_frame_length, VALUE rb_hop_length) {
-  Check_Type(rb_signal, T_ARRAY);
+  if (!RB_TYPE_P(rb_signal, T_ARRAY)) {
+    rb_raise(muze_parameter_error(), "signal must be an Array");
+  }
+
   const long signal_length = RARRAY_LEN(rb_signal);
   const long frame_length = NUM2LONG(rb_frame_length);
   const long hop_length = NUM2LONG(rb_hop_length);
 
   if (frame_length <= 0 || hop_length <= 0) {
-    rb_raise(rb_eArgError, "frame_length and hop_length must be positive");
+    rb_raise(muze_parameter_error(), "frame_length and hop_length must be positive");
   }
 
   if (signal_length <= frame_length) {
@@ -50,7 +62,10 @@ static int cmp_double(const void *a, const void *b) {
 }
 
 static VALUE native_median1d(VALUE self, VALUE rb_values) {
-  Check_Type(rb_values, T_ARRAY);
+  if (!RB_TYPE_P(rb_values, T_ARRAY)) {
+    rb_raise(muze_parameter_error(), "values must be an Array");
+  }
+
   const long count = RARRAY_LEN(rb_values);
   if (count == 0) return DBL2NUM(0.0);
 
