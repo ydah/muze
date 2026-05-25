@@ -103,25 +103,51 @@ module Muze
       rows, cols = matrix.shape
       output = Numo::SFloat.zeros(rows, cols)
 
-      rows.times do |row|
+      if axis == 1
+        rows.times do |row|
+          values = cols.times.map { |col| matrix[row, col] }
+          sliding_median(values, half).each_with_index { |value, col| output[row, col] = value }
+        end
+      else
         cols.times do |col|
-          values = []
-          if axis == 1
-            start_col = [col - half, 0].max
-            end_col = [col + half, cols - 1].min
-            (start_col..end_col).each { |index| values << matrix[row, index] }
-          else
-            start_row = [row - half, 0].max
-            end_row = [row + half, rows - 1].min
-            (start_row..end_row).each { |index| values << matrix[index, col] }
-          end
-
-          output[row, col] = Muze::Native.median1d(values)
+          values = rows.times.map { |row| matrix[row, col] }
+          sliding_median(values, half).each_with_index { |value, row| output[row, col] = value }
         end
       end
 
       output
     end
     private_class_method :median_filter
+
+    def sliding_median(values, half)
+      return [] if values.empty?
+
+      window = []
+      output = Array.new(values.length, 0.0)
+      values.length.times do |index|
+        remove_value(window, values[index - half - 1]) if index > half
+        entering = index + half
+        insert_value(window, values[entering]) if entering < values.length
+        output[index] = window[window.length / 2].to_f
+      end
+
+      output
+    end
+    private_class_method :sliding_median
+
+    def insert_value(sorted, value)
+      index = sorted.bsearch_index { |item| item > value } || sorted.length
+      sorted.insert(index, value)
+    end
+    private_class_method :insert_value
+
+    def remove_value(sorted, value)
+      index = sorted.bsearch_index { |item| item >= value }
+      return unless index
+
+      index += 1 while index < sorted.length && sorted[index] != value
+      sorted.delete_at(index) if index < sorted.length
+    end
+    private_class_method :remove_value
   end
 end

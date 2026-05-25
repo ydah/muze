@@ -1,24 +1,106 @@
 {
-  "generated_at": "2026-03-05T08:25:13Z",
+  "generated_at": "2026-05-25T12:40:47Z",
   "ruby_version": "4.0.0",
+  "ruby_platform": "arm64-darwin24",
+  "host_cpu": "arm64",
+  "numo_version": "0.10.3",
+  "numo_pocketfft_version": "0.6.0",
+  "native_extension_loaded": false,
+  "benchmark_iterations": 3,
+  "fixture_names": [
+    "sine",
+    "click",
+    "simple_mix",
+    "silence",
+    "noise",
+    "chirp",
+    "short_sine",
+    "stereo_mix"
+  ],
   "metrics": {
     "istft_reconstruction_error": {
-      "value": 0.014255197813810787,
+      "value": 0.02079559974123123,
       "unit": "rmse",
       "direction": "lower",
       "max_regression_ratio": 1.2
     },
     "time_stretch_processing_seconds": {
-      "value": 0.0018263333218379153,
+      "value": 0.04898650000056174,
       "unit": "seconds_per_fixture",
       "direction": "lower",
-      "max_regression_ratio": 4.0
+      "max_regression_ratio": 4.0,
+      "median_value": 0.047120999995968305,
+      "min_value": 0.00960299999860581
     },
     "pitch_shift_processing_seconds": {
-      "value": 0.0046148888973726165,
+      "value": 0.07519545833141213,
       "unit": "seconds_per_fixture",
       "direction": "lower",
-      "max_regression_ratio": 4.0
+      "max_regression_ratio": 4.0,
+      "median_value": 0.07278900001256261,
+      "min_value": 0.01425599999492988
+    },
+    "resample_processing_seconds": {
+      "value": 0.7511199583320073,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.7296499999938533,
+      "min_value": 0.1442280000046594
+    },
+    "stft_processing_seconds": {
+      "value": 0.010661249999733021,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.011826000001747161,
+      "min_value": 0.0024440000124741346
+    },
+    "melspectrogram_processing_seconds": {
+      "value": 0.017178124998584583,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.018747000009170733,
+      "min_value": 0.00430699999560602
+    },
+    "mfcc_processing_seconds": {
+      "value": 0.017865416666609235,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.019711000000825152,
+      "min_value": 0.004522999995970167
+    },
+    "chroma_processing_seconds": {
+      "value": 0.016160083334398223,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.017872999989776872,
+      "min_value": 0.0037259999953676015
+    },
+    "onset_strength_processing_seconds": {
+      "value": 0.016946583330839832,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.018790000001899898,
+      "min_value": 0.004083000007085502
+    },
+    "hpss_processing_seconds": {
+      "value": 0.11020287500044408,
+      "unit": "seconds_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 4.0,
+      "median_value": 0.10682900001120288,
+      "min_value": 0.022294000009424053
+    },
+    "feature_allocated_objects": {
+      "value": 55245.25,
+      "unit": "objects_per_fixture",
+      "direction": "lower",
+      "max_regression_ratio": 8.0
     }
   }
 }

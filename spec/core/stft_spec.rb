@@ -125,6 +125,23 @@ RSpec.describe Muze::Core::STFT do
       expect(matrices.length).to eq(2)
       expect(matrices.all? { |matrix| matrix.shape[0] == 129 }).to be(true)
     end
+
+    it "carries overlap across chunks to match full STFT framing" do
+      chunks = [signal[0...700], signal[700...1500], signal[1500...2048]]
+      streamed = concatenate_stft(Muze.stft_stream(chunks, n_fft: 256, hop_length: 128, flush: false))
+      full = Muze.stft(signal[0...2048], n_fft: 256, hop_length: 128, center: false)
+
+      expect(streamed.shape).to eq(full.shape)
+      expect((streamed - full).abs.max).to be < 1.0e-9
+    end
+
+    it "can flush a padded trailing stream frame" do
+      chunks = [signal[0...700], signal[700...1501]]
+      flushed = concatenate_stft(Muze.stft_stream(chunks, n_fft: 256, hop_length: 128, flush: true))
+      unflushed = concatenate_stft(Muze.stft_stream(chunks, n_fft: 256, hop_length: 128, flush: false))
+
+      expect(flushed.shape[1]).to be > unflushed.shape[1]
+    end
   end
 
   describe "dB conversion" do
@@ -194,5 +211,20 @@ RSpec.describe Muze::Core::STFT do
         Muze.stft(signal, n_fft: Muze::Core::STFT::MAX_N_FFT + 2, hop_length: 512)
       end.to raise_error(Muze::ParameterError, /n_fft/)
     end
+  end
+
+  def concatenate_stft(matrices)
+    rows = matrices.first.shape[0]
+    cols = matrices.sum { |matrix| matrix.shape[1] }
+    output = Numo::DComplex.zeros(rows, cols)
+    offset = 0
+    matrices.each do |matrix|
+      width = matrix.shape[1]
+      next if width.zero?
+
+      output[true, offset...(offset + width)] = matrix
+      offset += width
+    end
+    output
   end
 end

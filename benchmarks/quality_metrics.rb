@@ -60,6 +60,11 @@ module Muze
           direction: "lower",
           max_regression_ratio: 4.00
         },
+        "onset_strength_processing_seconds" => {
+          unit: "seconds_per_fixture",
+          direction: "lower",
+          max_regression_ratio: 4.00
+        },
         "hpss_processing_seconds" => {
           unit: "seconds_per_fixture",
           direction: "lower",
@@ -99,7 +104,7 @@ module Muze
         }
 
         write_json(output_path, report)
-        update_baseline_file(baseline_path, metrics) if update_baseline
+        update_baseline_file(baseline_path, metrics, fixture_names: fixtures.keys) if update_baseline
 
         if fail_on_regression && !regressions.empty?
           raise Muze::Error, format_regression_error(regressions)
@@ -119,13 +124,14 @@ module Muze
           "time_stretch_processing_seconds" => runtime_metric_entry("time_stretch_processing_seconds", fixtures) { |signal| Muze.time_stretch(signal, rate: 1.25) },
           "pitch_shift_processing_seconds" => runtime_metric_entry("pitch_shift_processing_seconds", fixtures) { |signal| Muze.pitch_shift(signal, sr: 22_050, n_steps: 4.0) },
           "resample_processing_seconds" => runtime_metric_entry("resample_processing_seconds", fixtures) { |signal| Muze.resample(signal, orig_sr: 22_050, target_sr: 16_000, res_type: :sinc) },
-          "stft_processing_seconds" => runtime_metric_entry("stft_processing_seconds", fixtures) { |signal| Muze.stft(signal, n_fft: 1024, hop_length: 256) },
-          "melspectrogram_processing_seconds" => runtime_metric_entry("melspectrogram_processing_seconds", fixtures) { |signal| Muze.melspectrogram(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64) },
-          "mfcc_processing_seconds" => runtime_metric_entry("mfcc_processing_seconds", fixtures) { |signal| Muze.mfcc(y: signal, n_fft: 1024, hop_length: 256, n_mels: 64, n_mfcc: 13) },
-          "chroma_processing_seconds" => runtime_metric_entry("chroma_processing_seconds", fixtures) { |signal| Muze.chroma_stft(y: signal, n_fft: 1024, hop_length: 256) },
+          "stft_processing_seconds" => runtime_metric_entry("stft_processing_seconds", fixtures) { |signal| Muze.stft(mono_signal(signal), n_fft: 1024, hop_length: 256) },
+          "melspectrogram_processing_seconds" => runtime_metric_entry("melspectrogram_processing_seconds", fixtures) { |signal| Muze.melspectrogram(y: mono_signal(signal), n_fft: 1024, hop_length: 256, n_mels: 64) },
+          "mfcc_processing_seconds" => runtime_metric_entry("mfcc_processing_seconds", fixtures) { |signal| Muze.mfcc(y: mono_signal(signal), n_fft: 1024, hop_length: 256, n_mels: 64, n_mfcc: 13) },
+          "chroma_processing_seconds" => runtime_metric_entry("chroma_processing_seconds", fixtures) { |signal| Muze.chroma_stft(y: mono_signal(signal), n_fft: 1024, hop_length: 256) },
+          "onset_strength_processing_seconds" => runtime_metric_entry("onset_strength_processing_seconds", fixtures) { |signal| Muze.onset_strength(y: mono_signal(signal), n_fft: 1024, hop_length: 256) },
           "hpss_processing_seconds" => runtime_metric_entry("hpss_processing_seconds", fixtures) { |signal| Muze.hpss(signal, kernel_size: 9, n_fft: 1024, hop_length: 256) },
           "feature_allocated_objects" => metric_entry(
-            value: average_allocations_per_fixture(fixtures) { |signal| Muze.features(y: signal, n_fft: 1024, hop_length: 256) },
+            value: average_allocations_per_fixture(fixtures) { |signal| Muze.features(y: mono_signal(signal), n_fft: 1024, hop_length: 256) },
             definition: METRIC_DEFINITIONS.fetch("feature_allocated_objects")
           )
         }
@@ -161,9 +167,10 @@ module Muze
       # @return [Float]
       def average_istft_error(fixtures)
         errors = fixtures.values.map do |signal|
-          stft_matrix = Muze.stft(signal, n_fft: 1024, hop_length: 256)
-          reconstructed = Muze.istft(stft_matrix, hop_length: 256, length: signal.size)
-          delta = signal - reconstructed
+          source = mono_signal(signal)
+          stft_matrix = Muze.stft(source, n_fft: 1024, hop_length: 256)
+          reconstructed = Muze.istft(stft_matrix, hop_length: 256, length: source.size)
+          delta = source - reconstructed
           Math.sqrt((delta * delta).mean.to_f)
         end
 
@@ -221,6 +228,15 @@ module Muze
         Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
       end
       private_class_method :measure_elapsed
+
+      def mono_signal(signal)
+        matrix = Numo::SFloat.cast(signal)
+        return matrix unless matrix.ndim == 2
+
+        _, channels = matrix.shape
+        (matrix.sum(1) / channels).cast_to(Numo::SFloat)
+      end
+      private_class_method :mono_signal
 
       # @return [Integer]
       def benchmark_iterations
@@ -287,16 +303,20 @@ module Muze
 
       # @param baseline_path [String]
       # @param metrics [Hash]
+      # @param fixture_names [Array<String>]
       # @return [void]
-      def update_baseline_file(baseline_path, metrics)
+      def update_baseline_file(baseline_path, metrics, fixture_names:)
         FileUtils.mkdir_p(File.dirname(baseline_path))
         payload = {
           generated_at: Time.now.utc.iso8601,
           ruby_version: RUBY_VERSION,
           ruby_platform: RUBY_PLATFORM,
           host_cpu: RbConfig::CONFIG["host_cpu"],
+          numo_version: constant_version("Numo::NArray::VERSION"),
+          numo_pocketfft_version: constant_version("Numo::Pocketfft::VERSION"),
           native_extension_loaded: Muze::Native.extension_loaded?,
           benchmark_iterations: benchmark_iterations,
+          fixture_names: fixture_names,
           metrics: metrics.transform_values do |entry|
             payload = {
               value: entry.fetch(:value),

@@ -4,7 +4,7 @@ module Muze
   module Effects
     module_function
 
-    # Keep fast path for short clips where phase vocoder overhead dominates.
+    # Use smaller FFTs for short clips so phase vocoding remains practical.
     MIN_PHASE_VOCODER_SAMPLES = 32_768
     MIN_TIME_STRETCH_RATE = 1.0 / 32.0
     MAX_TIME_STRETCH_RATE = 32.0
@@ -25,7 +25,8 @@ module Muze
       return apply_channels(signal) { |channel| time_stretch(channel, rate:, n_fft:, hop_length:, method:, phase_lock:, force_phase_vocoder:) } if signal.ndim == 2
       return signal if signal.empty? || rate == 1.0
       return linear_time_stretch(signal.to_a, rate) if method == :linear
-      return ola_time_stretch(signal.to_a, rate) if %i[ola wsola].include?(method) || (!force_phase_vocoder && signal.size < MIN_PHASE_VOCODER_SAMPLES)
+      return ola_time_stretch(signal.to_a, rate) if method == :ola
+      return wsola_time_stretch(signal.to_a, rate) if method == :wsola
 
       n_fft ||= phase_vocoder_fft_size(signal.size)
       hop_length ||= [n_fft / 4, 1].max
@@ -67,10 +68,11 @@ module Muze
     # @param frame_length [Integer]
     # @param hop_length [Integer]
     # @return [Array(Numo::SFloat, Array<Integer>)] trimmed signal and [start, end]
-    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean)
+    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean, units: :samples, sr: nil)
       raise Muze::ParameterError, "top_db must be non-negative" if top_db.negative?
       raise Muze::ParameterError, "frame_length and hop_length must be positive" unless frame_length.positive? && hop_length.positive?
       raise Muze::ParameterError, "aggregate must be :mean or :max" unless %i[mean max].include?(aggregate)
+      validate_trim_units!(units:, sr:, hop_length:)
 
       signal = Muze::Core::Audio.validate_audio!(y, allow_empty: true)
       amplitude = sample_amplitude(signal, aggregate:)
@@ -94,7 +96,7 @@ module Muze
       start_sample = active_samples.first
       end_sample = active_samples.last + 1
       trimmed = signal.ndim == 2 ? signal[start_sample...end_sample, true] : signal[start_sample...end_sample]
-      [trimmed, [start_sample, end_sample]]
+      [trimmed, convert_trim_interval(start_sample, end_sample, units:, sr:, hop_length:)]
     end
 
     def preemphasis(y, coef: 0.97)
@@ -266,11 +268,110 @@ module Muze
 
       output.map!.with_index do |value, index|
         denominator = window_sums[index]
-        denominator > 1.0e-12 ? value / denominator : value
+        denominator > 1.0e-3 ? value / denominator : 0.0
       end
-      Numo::SFloat.cast(output[0, target_length])
+      Numo::SFloat.cast(limit_peak(output[0, target_length], signal.map(&:abs).max.to_f))
     end
     private_class_method :ola_time_stretch
+
+    def wsola_time_stretch(signal, rate)
+      frame_length = [[next_power_of_two([signal.length / 8, 256].max), 2048].min, 32].max
+      analysis_hop = [frame_length / 2, 1].max
+      synthesis_hop = [(analysis_hop / rate).round, 1].max
+      target_length = [(signal.length / rate).round, 1].max
+      output = Array.new(target_length + frame_length, 0.0)
+      window_sums = Array.new(output.length, 0.0)
+      window = Muze::Core::Windows.hann(frame_length).to_a
+      overlap = [[frame_length - synthesis_hop, 0].max, frame_length / 2].min
+      search_radius = [[analysis_hop / 2, 8].max, frame_length].min
+
+      target_start = 0
+      source_start = 0
+      first_frame = true
+
+      while target_start < target_length
+        expected_source = (target_start * rate).round
+        source_start = if first_frame || overlap.zero?
+                         [[expected_source, 0].max, signal.length - 1].min
+                       else
+                         best_wsola_source_start(signal, output, target_start, expected_source, frame_length, overlap, search_radius)
+                       end
+
+        overlap_add_frame(signal, output, window_sums, window, source_start:, target_start:, frame_length:)
+        first_frame = false
+        target_start += synthesis_hop
+      end
+
+      output.map!.with_index do |value, index|
+        denominator = window_sums[index]
+        denominator > 1.0e-3 ? value / denominator : 0.0
+      end
+      Numo::SFloat.cast(limit_peak(output[0, target_length], signal.map(&:abs).max.to_f))
+    end
+    private_class_method :wsola_time_stretch
+
+    def best_wsola_source_start(signal, output, target_start, expected_source, frame_length, overlap, search_radius)
+      lower = [expected_source - search_radius, 0].max
+      upper = [expected_source + search_radius, [signal.length - 1, 0].max].min
+      best_start = lower
+      best_score = -Float::INFINITY
+
+      (lower..upper).each do |candidate|
+        score = overlap_correlation(signal, output, candidate, target_start, overlap)
+        next unless score > best_score
+
+        best_score = score
+        best_start = candidate
+      end
+
+      [best_start, [signal.length - frame_length, 0].max].min
+    end
+    private_class_method :best_wsola_source_start
+
+    def overlap_correlation(signal, output, source_start, target_start, overlap)
+      numerator = 0.0
+      source_energy = 0.0
+      output_energy = 0.0
+
+      overlap.times do |offset|
+        source_index = source_start + offset
+        target_index = target_start + offset
+        break if source_index >= signal.length || target_index >= output.length
+
+        source_value = signal[source_index]
+        output_value = output[target_index]
+        numerator += source_value * output_value
+        source_energy += source_value * source_value
+        output_energy += output_value * output_value
+      end
+
+      denominator = Math.sqrt(source_energy * output_energy)
+      denominator <= 1.0e-12 ? 0.0 : numerator / denominator
+    end
+    private_class_method :overlap_correlation
+
+    def overlap_add_frame(signal, output, window_sums, window, source_start:, target_start:, frame_length:)
+      frame_length.times do |offset|
+        source_index = source_start + offset
+        target_index = target_start + offset
+        break if target_index >= output.length
+
+        value = source_index < signal.length ? signal[source_index] : 0.0
+        weight = window[offset]
+        output[target_index] += value * weight
+        window_sums[target_index] += weight * weight
+      end
+    end
+    private_class_method :overlap_add_frame
+
+    def limit_peak(values, target_peak)
+      peak = values.map(&:abs).max.to_f
+      return values if target_peak <= 0.0 || peak <= target_peak
+
+      scale = target_peak / peak
+      values.map { |value| value * scale }
+    end
+    private_class_method :limit_peak
 
     def next_power_of_two(value)
       power = 1
@@ -304,6 +405,25 @@ module Muze
       end
     end
     private_class_method :trim_reference
+
+    def validate_trim_units!(units:, sr:, hop_length:)
+      raise Muze::ParameterError, "units must be :samples, :frames, or :time" unless %i[samples frames time].include?(units)
+      raise Muze::ParameterError, "sr must be positive for time units" if units == :time && !(sr.is_a?(Integer) && sr.positive?)
+      raise Muze::ParameterError, "hop_length must be positive for frame units" if units == :frames && !(hop_length.is_a?(Integer) && hop_length.positive?)
+    end
+    private_class_method :validate_trim_units!
+
+    def convert_trim_interval(start_sample, end_sample, units:, sr:, hop_length:)
+      case units
+      when :samples
+        [start_sample, end_sample]
+      when :frames
+        [start_sample, end_sample].map { |sample| (sample / hop_length.to_f).floor }
+      when :time
+        [start_sample, end_sample].map { |sample| sample.to_f / sr }
+      end
+    end
+    private_class_method :convert_trim_interval
 
     def apply_channels(matrix)
       frames, channels = matrix.shape

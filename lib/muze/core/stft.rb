@@ -115,9 +115,26 @@ module Muze
 
       # @param chunks [Enumerable<Array<Float>, Numo::NArray>]
       # @return [Array<Numo::DComplex>]
-      def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false)
-        chunks.map do |chunk|
-          stft(chunk, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end: true, periodic:)
+      def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false, flush: true)
+        return chunks.map { |chunk| stft(chunk, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end: true, periodic:) } if center
+
+        win_length ||= n_fft
+        validate_stft_params!(n_fft:, hop_length:, win_length:)
+        raise Muze::ParameterError, "flush must be true or false" unless [true, false].include?(flush)
+
+        chunk_list = chunks.to_a
+        buffer = []
+        chunk_list.each_with_index.map do |chunk, index|
+          final = index == chunk_list.length - 1
+          buffer.concat(signal_to_a(chunk))
+          frame_count = stream_frame_count(buffer.length, n_fft:, hop_length:, final: final && flush)
+          next empty_stft_matrix(n_fft) if frame_count.zero?
+
+          matrix = stft(buffer, n_fft:, hop_length:, win_length:, window:, center: false, pad_end: final && flush, periodic:)
+          emitted = matrix.shape[1]
+          consumed = final && flush ? buffer.length : emitted * hop_length
+          buffer = buffer[consumed..] || []
+          matrix
         end
       end
 
@@ -214,6 +231,19 @@ module Muze
         signal + Array.new(length - signal.length, 0.0)
       end
       private_class_method :adjust_length
+
+      def stream_frame_count(length, n_fft:, hop_length:, final:)
+        return final && length.positive? ? 1 : 0 if length <= n_fft
+        return (((length - n_fft).to_f / hop_length).ceil + 1) if final
+
+        ((length - n_fft) / hop_length) + 1
+      end
+      private_class_method :stream_frame_count
+
+      def empty_stft_matrix(n_fft)
+        Numo::DComplex.zeros((n_fft / 2) + 1, 0)
+      end
+      private_class_method :empty_stft_matrix
 
       def log_scale(values, ref:, amin:, top_db:, multiplier:)
         raise Muze::ParameterError, "amin must be positive" unless amin.positive?

@@ -27,6 +27,13 @@ module Muze
         silence = Array.new(sample_count, 0.0)
         noise = deterministic_noise(sample_count:)
         chirp = chirp_signal(sample_rate:, sample_count:, start_frequency: 120.0, end_frequency: 4_000.0)
+        short_sine = sine_wave(
+          sample_rate: sample_rate,
+          sample_count: [(sample_rate * 0.2).round, 1].max,
+          frequency: 440.0,
+          amplitude: 0.8
+        )
+        stereo_mix = simple_mix.each_with_index.map { |sample, index| [sample, sine[index] * 0.5] }
 
         {
           "sine" => Numo::SFloat.cast(sine),
@@ -34,7 +41,9 @@ module Muze
           "simple_mix" => Numo::SFloat.cast(simple_mix),
           "silence" => Numo::SFloat.cast(silence),
           "noise" => Numo::SFloat.cast(noise),
-          "chirp" => Numo::SFloat.cast(chirp)
+          "chirp" => Numo::SFloat.cast(chirp),
+          "short_sine" => Numo::SFloat.cast(short_sine),
+          "stereo_mix" => Numo::SFloat.cast(stereo_mix)
         }
       end
 

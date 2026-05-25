@@ -46,19 +46,31 @@ RSpec.describe Muze::Effects do
       expect(stretched.size).to be_within(1).of(signal.size / 2)
     end
 
-    it "supports WSOLA alias and phase locking" do
+    it "supports OLA, WSOLA, and phase locking" do
+      ola = described_class.time_stretch(signal, rate: 1.5, method: :ola)
       wsola = described_class.time_stretch(signal, rate: 1.5, method: :wsola)
       locked = described_class.time_stretch(long_signal, rate: 1.5, phase_lock: true)
 
       expect(wsola.size).to be_within(1).of((signal.size / 1.5).round)
+      expect((wsola - ola).abs.max).to be > 0.0
       expect(locked.size).to be_within(1).of((long_signal.size / 1.5).round)
     end
 
-    it "can force phase vocoder for short clips" do
+    it "uses phase vocoder for short clips" do
       short = signal[0...4096]
-      stretched = described_class.time_stretch(short, rate: 1.25, force_phase_vocoder: true)
+      stretched = described_class.time_stretch(short, rate: 1.25)
 
       expect(stretched.size).to be_within(1).of((short.size / 1.25).round)
+    end
+
+    it "preserves short-clip pitch better than linear interpolation" do
+      short = signal[0...4096]
+      stretched = described_class.time_stretch(short, rate: 1.5)
+      baseline = described_class.time_stretch(short, rate: 1.5, method: :linear)
+      stretched_peak = SpecEffectQualityMetrics.dominant_frequency(stretched, sr:)
+      baseline_peak = SpecEffectQualityMetrics.dominant_frequency(baseline, sr:)
+
+      expect((stretched_peak - 440.0).abs).to be < (baseline_peak - 440.0).abs
     end
 
     it "rejects extreme rates" do
@@ -176,6 +188,18 @@ RSpec.describe Muze::Effects do
       expect(trimmed.shape[1]).to eq(2)
       expect(start_idx).to be > 0
       expect(end_idx).to be > start_idx
+    end
+
+    it "can report trim intervals in frames or time" do
+      padded = Numo::SFloat.zeros(signal.size + 4000)
+      padded[2000...(2000 + signal.size)] = signal
+
+      _, sample_interval = described_class.trim(padded, top_db: 30, frame_length: 1024, hop_length: 256, units: :samples)
+      _, frame_interval = described_class.trim(padded, top_db: 30, frame_length: 1024, hop_length: 256, units: :frames)
+      _, time_interval = described_class.trim(padded, top_db: 30, frame_length: 1024, hop_length: 256, units: :time, sr:)
+
+      expect(frame_interval.first).to be_a(Integer)
+      expect(time_interval.first).to be_within(1.0 / sr).of(sample_interval.first.to_f / sr)
     end
   end
 

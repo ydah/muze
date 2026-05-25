@@ -40,6 +40,15 @@ RSpec.describe Muze::Display do
       expect(fragment).not_to include("<svg")
     end
 
+    it "can render spectrogram cells as an embedded image" do
+      data = Numo::SFloat.new(16, 16).rand
+      svg = described_class.specshow(data, render: :image)
+
+      expect(svg).to include("<image")
+      expect(svg).to include("data:image/bmp;base64")
+      expect(svg).to include("data-render='image'")
+    end
+
     it "rejects invalid display parameters" do
       expect do
         described_class.specshow(Numo::SFloat[[1.0]], sr: 0)
@@ -48,6 +57,10 @@ RSpec.describe Muze::Display do
       expect do
         described_class.specshow(Numo::SFloat[[1.0]], vmin: 2.0, vmax: 1.0)
       end.to raise_error(Muze::ParameterError, /vmin/)
+
+      expect do
+        described_class.specshow(Numo::SFloat[[1.0]], render: :bad)
+      end.to raise_error(Muze::ParameterError, /render/)
     end
   end
 

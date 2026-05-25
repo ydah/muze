@@ -83,8 +83,8 @@ module Muze
     end
 
     # @return [Array<Numo::DComplex>]
-    def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false)
-      Muze::Core::STFT.stft_stream(chunks, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, periodic:)
+    def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false, flush: true)
+      Muze::Core::STFT.stft_stream(chunks, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, periodic:, flush:)
     end
 
     # @param s [Numo::NArray]
@@ -241,6 +241,11 @@ module Muze
       Muze::Feature.extract(y:, sr:, features:, n_fft:, hop_length:, center:, pad_mode:)
     end
 
+    # @return [Hash]
+    def feature_stack(y:, sr: 22_050, features: Muze::Feature::Context::DEFAULT_FEATURES, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.extract(y:, sr:, features:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
     # @return [Numo::SFloat]
     def beat_sync(data, beats:, aggregate: :mean)
       Muze::Feature.beat_sync(data, beats:, aggregate:)
@@ -367,8 +372,8 @@ module Muze
     end
 
     # @return [Array(Numo::SFloat, Array<Integer>)]
-    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean)
-      Muze::Effects.trim(y, top_db:, frame_length:, hop_length:, ref:, aggregate:)
+    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean, units: :samples, sr: nil)
+      Muze::Effects.trim(y, top_db:, frame_length:, hop_length:, ref:, aggregate:, units:, sr:)
     end
 
     # @return [Numo::SFloat]
@@ -382,8 +387,8 @@ module Muze
     end
 
     # @return [String]
-    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil, fragment: false)
-      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:, width:, height:, cmap:, vmin:, vmax:, fragment:)
+    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil, fragment: false, render: :auto)
+      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:, width:, height:, cmap:, vmin:, vmax:, fragment:, render:)
     end
 
     # @return [String]

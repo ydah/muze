@@ -109,6 +109,12 @@ RSpec.describe Muze::Feature do
       expect(result.keys).to contain_exactly(:melspectrogram, :chroma_stft, :spectral_centroid, :tonnetz)
       expect(result.fetch(:tonnetz).shape[0]).to eq(6)
     end
+
+    it "exposes a public feature_stack convenience alias" do
+      result = Muze.feature_stack(y: sine(440.0), sr:, features: %i[spectral_centroid rms], n_fft: 1024, hop_length: 256)
+
+      expect(result.keys).to contain_exactly(:spectral_centroid, :rms)
+    end
   end
 
   describe ".beat_sync" do
