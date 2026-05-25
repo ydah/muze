@@ -89,4 +89,13 @@ RSpec.describe Muze::Beat do
       expect(frequencies[1]).to be_within(1.0e-6).of(60.0 * sr / hop_length)
     end
   end
+
+  describe ".tempogram" do
+    it "can compute normalized autocorrelation values" do
+      tempo = described_class.tempogram(onset_envelope: [1.0, 0.0, 1.0, 0.0, 1.0], win_length: 4, normalize: true)
+
+      expect(tempo.max).to be <= 1.0
+      expect(tempo[2, 4]).to be_within(1.0e-6).of(1.0)
+    end
+  end
 end

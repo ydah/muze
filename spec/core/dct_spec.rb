@@ -9,5 +9,21 @@ RSpec.describe Muze::Core::DCT do
       expect(result[0, 0]).to be_within(1.0e-6).of(2.0)
       expect(result[1, 0].abs).to be < 1.0e-6
     end
+
+    it "supports axis 1 and cached matrix multiplication path" do
+      input = Numo::SFloat[[1.0, 1.0, 1.0, 1.0]]
+      result = described_class.dct(input, axis: 1, norm: :ortho)
+
+      expect(result.shape).to eq([1, 4])
+      expect(result[0, 0]).to be_within(1.0e-6).of(2.0)
+      expect(result[0, 1].abs).to be < 1.0e-6
+    end
+
+    it "pads or trims to n before transforming" do
+      input = Numo::SFloat[[1.0], [1.0]]
+      result = described_class.dct(input, n: 4, norm: :ortho)
+
+      expect(result.shape).to eq([4, 1])
+    end
   end
 end

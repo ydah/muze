@@ -6,6 +6,7 @@ module Muze
     module STFT
       EPSILON = 1.0e-12
       MAX_N_FFT = 262_144
+      FREQUENCY_CACHE = {}
       module_function
 
       # @param y [Numo::SFloat, Array<Float>] waveform signal
@@ -162,7 +163,8 @@ module Muze
         raise Muze::ParameterError, "sr must be positive" unless sr.positive?
         raise Muze::ParameterError, "n_fft must be positive" unless n_fft.positive?
 
-        Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft })
+        key = [sr, n_fft]
+        (FREQUENCY_CACHE[key] ||= Numo::SFloat.cast(Array.new((n_fft / 2) + 1) { |index| index * sr.to_f / n_fft })).dup
       end
 
       # @param frames [Integer, Array<Integer>, Numo::NArray]

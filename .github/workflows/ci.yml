@@ -32,6 +32,9 @@ jobs:
           bundler-cache: true
       - name: Run specs
         run: bundle exec rspec
+      - name: Run native fallback specs
+        if: matrix.os == 'ubuntu-latest' && matrix.ruby == '4.0'
+        run: MUZE_DISABLE_NATIVE=1 bundle exec rspec spec/native_spec.rb
       - name: Run benchmark regression guard
         if: matrix.os == 'ubuntu-latest' && matrix.ruby == '4.0'
         run: bundle exec rake bench

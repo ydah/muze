@@ -38,8 +38,8 @@ module Muze
     # @param hop_length [Integer]
     # @param win_length [Integer]
     # @return [Numo::SFloat]
-    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384)
-      Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:)
+    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384, normalize: false)
+      Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:, normalize:)
     end
 
     def tempo_frequencies(sr: 22_050, hop_length: 512, win_length: 384)

@@ -13,6 +13,7 @@ require_relative "muze/core/stft"
 require_relative "muze/core/resample"
 require_relative "muze/core/dct"
 require_relative "muze/io/audio_loader"
+require_relative "muze/io/audio_writer"
 require_relative "muze/filters/mel"
 require_relative "muze/filters/chroma_filter"
 require_relative "muze/feature/mfcc"
@@ -44,6 +45,11 @@ module Muze
     # @return [Hash]
     def info(path, format: nil)
       Muze::IO::AudioLoader.info(path, format:)
+    end
+
+    # @return [Object] the output path or IO object
+    def write(path, y, sr:, normalize: false, format: :wav)
+      Muze::IO::AudioWriter.write(path, y, sr:, normalize:, format:)
     end
 
     # @param y [Numo::SFloat, Array<Float>]
@@ -306,8 +312,8 @@ module Muze
     end
 
     # @return [Numo::SFloat]
-    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384)
-      Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:)
+    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384, normalize: false)
+      Muze::Feature.tempogram(y:, onset_envelope:, sr:, hop_length:, win_length:, normalize:)
     end
 
     # @return [Numo::SFloat]

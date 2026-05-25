@@ -181,3 +181,40 @@ RSpec.describe Muze::IO::AudioLoader do
     raise "Failed to convert fixture with ffmpeg: #{stderr.strip}"
   end
 end
+
+RSpec.describe Muze::IO::AudioWriter do
+  describe ".write" do
+    it "writes mono WAV output that can be loaded again" do
+      Dir.mktmpdir("muze-audio-writer") do |tmpdir|
+        path = File.join(tmpdir, "output.wav")
+        signal = Numo::SFloat.cast([0.0, 0.5, -0.5, 0.0])
+
+        Muze.write(path, signal, sr: 8_000)
+        loaded, sr = Muze.load(path, sr: 8_000)
+
+        expect(sr).to eq(8_000)
+        expect(loaded.size).to eq(signal.size)
+        expect((loaded - signal).abs.max).to be < 1.0e-6
+      end
+    end
+
+    it "writes stereo WAV output and supports normalization" do
+      Dir.mktmpdir("muze-audio-writer") do |tmpdir|
+        path = Pathname(File.join(tmpdir, "stereo.wav"))
+        signal = Numo::SFloat.cast([[0.0, 0.0], [2.0, -1.0]])
+
+        Muze.write(path, signal, sr: 8_000, normalize: true)
+        loaded, = Muze.load(path, sr: 8_000, mono: false)
+
+        expect(loaded.shape).to eq(signal.shape)
+        expect(loaded.abs.max).to be_within(1.0e-6).of(1.0)
+      end
+    end
+
+    it "rejects unsupported output formats" do
+      expect do
+        Muze.write("out.flac", [0.0], sr: 8_000, format: :flac)
+      end.to raise_error(Muze::UnsupportedFormatError, /WAV/)
+    end
+  end
+end

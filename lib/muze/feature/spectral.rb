@@ -327,12 +327,13 @@ module Muze
     # @param hop_length [Integer]
     # @param win_length [Integer]
     # @return [Numo::SFloat]
-    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384)
+    def tempogram(y: nil, onset_envelope: nil, sr: 22_050, hop_length: 512, win_length: 384, normalize: false)
       envelope = if onset_envelope
                    onset_envelope.is_a?(Numo::NArray) ? onset_envelope.to_a : Array(onset_envelope)
                  else
                    onset_env_from_signal(y, sr:, hop_length:)
                  end
+      validate_finite_array!(envelope, "onset_envelope")
 
       frames = envelope.length
       tempogram = Numo::SFloat.zeros(win_length, frames)
@@ -347,7 +348,7 @@ module Muze
           (lag...segment.length).each do |offset|
             value += segment[offset] * segment[offset - lag]
           end
-          tempogram[lag, frame_index] = value
+          tempogram[lag, frame_index] = normalize ? normalized_autocorrelation(segment, lag, value) : value
         end
       end
 
@@ -395,6 +396,20 @@ module Muze
       onset
     end
     private_class_method :onset_env_from_signal
+
+    def normalized_autocorrelation(segment, lag, value)
+      left_energy = 0.0
+      right_energy = 0.0
+      (lag...segment.length).each do |offset|
+        left = segment[offset]
+        right = segment[offset - lag]
+        left_energy += left * left
+        right_energy += right * right
+      end
+      denominator = Math.sqrt(left_energy * right_energy)
+      denominator <= 1.0e-12 ? 0.0 : value / denominator
+    end
+    private_class_method :normalized_autocorrelation
 
     def normalize_frequency_axis(values)
       min = values.min

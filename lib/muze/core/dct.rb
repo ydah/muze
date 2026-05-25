@@ -4,6 +4,7 @@ module Muze
   module Core
     # DCT utilities.
     module DCT
+      BASIS_CACHE = {}
       module_function
 
       # @param x [Numo::NArray]
@@ -22,34 +23,36 @@ module Muze
 
         rows, cols = matrix.shape
         target_length = n || rows
-        result = Numo::SFloat.zeros(target_length, cols)
-
-        cols.times do |col|
-          signal = matrix[true, col].to_a
-          transformed = dct_vector(signal, target_length, norm:)
-          target_length.times { |idx| result[idx, col] = transformed[idx] }
-        end
+        working = adjust_rows(matrix, target_length)
+        result = basis_matrix(rows: target_length, cols: target_length, norm:).dot(working).cast_to(Numo::SFloat)
 
         axis == 1 ? result.transpose : result
       end
 
-      def dct_vector(signal, n, norm:)
-        padded = if signal.length >= n
-                   signal[0, n]
-                 else
-                   signal + Array.new(n - signal.length, 0.0)
-                 end
+      def adjust_rows(matrix, target_length)
+        rows, cols = matrix.shape
+        return matrix[0...target_length, true] if rows >= target_length
 
-        Array.new(n) do |k|
-          sum = 0.0
-          n.times do |idx|
-            sum += padded[idx] * Math.cos(Math::PI * (idx + 0.5) * k / n)
-          end
-
-          normalize_dct(sum, k, n, norm)
-        end
+        output = Numo::SFloat.zeros(target_length, cols)
+        output[0...rows, true] = matrix
+        output
       end
-      private_class_method :dct_vector
+      private_class_method :adjust_rows
+
+      def basis_matrix(rows:, cols:, norm:)
+        key = [rows, cols, norm]
+        (BASIS_CACHE[key] ||= begin
+          matrix = Numo::SFloat.zeros(rows, cols)
+          rows.times do |row|
+            cols.times do |col|
+              value = Math.cos(Math::PI * (col + 0.5) * row / cols)
+              matrix[row, col] = normalize_dct(value, row, cols, norm)
+            end
+          end
+          matrix
+        end)
+      end
+      private_class_method :basis_matrix
 
       def normalize_dct(value, index, length, norm)
         return value * 2.0 unless norm == :ortho

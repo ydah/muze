@@ -5,12 +5,16 @@ module Muze
   module Native
     module_function
 
-    begin
-      require "muze/muze_ext"
-      EXTENSION_LOADED = true
-    rescue LoadError
-      EXTENSION_LOADED = false
-    end
+    EXTENSION_LOADED = if ENV.fetch("MUZE_DISABLE_NATIVE", "0") == "1"
+                         false
+                       else
+                         begin
+                           require "muze/muze_ext"
+                           true
+                         rescue LoadError
+                           false
+                         end
+                       end
 
     # @return [Boolean]
     def extension_loaded?
