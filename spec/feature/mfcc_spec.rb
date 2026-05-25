@@ -32,6 +32,13 @@ RSpec.describe Muze::Feature do
 
       expect(coeffs.shape[0]).to eq(7)
     end
+
+    it "supports liftering" do
+      plain = described_class.mfcc(y: signal, sr:, n_mfcc: 13, n_fft: 512, hop_length: 128, n_mels: 40)
+      lifted = described_class.mfcc(y: signal, sr:, n_mfcc: 13, n_fft: 512, hop_length: 128, n_mels: 40, lifter: 22)
+
+      expect((plain - lifted).abs.max).to be > 0.0
+    end
   end
 
   describe ".delta" do
@@ -40,6 +47,12 @@ RSpec.describe Muze::Feature do
       delta = described_class.delta(coeffs, order: 1, width: 9)
 
       expect(delta.shape).to eq(coeffs.shape)
+    end
+
+    it "accepts array input and alternate edge modes" do
+      delta = described_class.delta([[1.0, 2.0, 4.0, 8.0]], width: 3, mode: :mirror)
+
+      expect(delta.shape).to eq([1, 4])
     end
   end
 end

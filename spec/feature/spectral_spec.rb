@@ -38,5 +38,31 @@ RSpec.describe Muze::Feature do
       expect(values.shape[0]).to eq(1)
       expect(values.shape[1]).to be > 0
     end
+
+    it "returns zero crossing rate with frame dimension" do
+      values = described_class.zero_crossing_rate(sine(440.0), frame_length: 1024, hop_length: 256)
+
+      expect(values.shape[0]).to eq(1)
+      expect(values.shape[1]).to be > 0
+    end
+
+    it "validates spectral parameters" do
+      expect { described_class.spectral_rolloff(y: sine(440.0), roll_percent: 1.0) }.to raise_error(Muze::ParameterError)
+      expect { described_class.spectral_bandwidth(y: sine(440.0), p: 0) }.to raise_error(Muze::ParameterError)
+      expect { described_class.spectral_flatness(y: sine(440.0), amin: 0.0) }.to raise_error(Muze::ParameterError)
+      expect { described_class.spectral_contrast(y: sine(440.0), quantile: 0.5) }.to raise_error(Muze::ParameterError)
+    end
+
+    it "computes additional spectral descriptors" do
+      descriptors = [
+        described_class.spectral_flux(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256),
+        described_class.spectral_entropy(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256),
+        described_class.spectral_crest(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256),
+        described_class.spectral_slope(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256),
+        described_class.spectral_decrease(y: sine(440.0), sr:, n_fft: 1024, hop_length: 256)
+      ]
+
+      expect(descriptors.all? { |descriptor| descriptor.shape[0] == 1 && descriptor.shape[1].positive? }).to be(true)
+    end
   end
 end

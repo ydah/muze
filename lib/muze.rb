@@ -6,6 +6,7 @@ require_relative "muze/version"
 require_relative "muze/errors"
 require_relative "muze/native"
 require_relative "muze/core/windows"
+require_relative "muze/core/matrix"
 require_relative "muze/core/stft"
 require_relative "muze/core/resample"
 require_relative "muze/core/dct"
@@ -145,8 +146,13 @@ module Muze
     # @param fmax [Float, nil]
     # @param htk [Boolean]
     # @return [Numo::SFloat]
-    def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false)
-      Muze::Filters.mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:)
+    def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false, norm: nil)
+      Muze::Filters.mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:, norm:)
+    end
+
+    # @return [Numo::SFloat]
+    def mel_frequencies(n_mels:, fmin:, fmax:, htk: false)
+      Muze::Filters.mel_frequencies(n_mels:, fmin:, fmax:, htk:)
     end
 
     # @param y [Numo::SFloat, Array<Float>, nil]
@@ -158,8 +164,8 @@ module Muze
     # @param fmin [Float]
     # @param fmax [Float, nil]
     # @return [Numo::SFloat]
-    def melspectrogram(y: nil, sr: 22_050, s: nil, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil)
-      Muze::Feature.melspectrogram(y:, sr:, s:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
+    def melspectrogram(y: nil, sr: 22_050, s: nil, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, power: 2.0, center: true, window: :hann, pad_mode: :reflect, norm: nil)
+      Muze::Feature.melspectrogram(y:, sr:, s:, n_fft:, hop_length:, n_mels:, fmin:, fmax:, power:, center:, window:, pad_mode:, norm:)
     end
 
     # @param y [Numo::SFloat, Array<Float>, nil]
@@ -172,8 +178,8 @@ module Muze
     # @param fmin [Float]
     # @param fmax [Float, nil]
     # @return [Numo::SFloat]
-    def mfcc(y: nil, sr: 22_050, s: nil, n_mfcc: 20, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil)
-      Muze::Feature.mfcc(y:, sr:, s:, n_mfcc:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
+    def mfcc(y: nil, sr: 22_050, s: nil, n_mfcc: 20, n_fft: 2048, hop_length: 512, n_mels: 128, fmin: 0.0, fmax: nil, dct_type: 2, lifter: 0, norm: :ortho)
+      Muze::Feature.mfcc(y:, sr:, s:, n_mfcc:, n_fft:, hop_length:, n_mels:, fmin:, fmax:, dct_type:, lifter:, norm:)
     end
 
     # @param data [Numo::SFloat]
@@ -186,38 +192,63 @@ module Muze
     end
 
     # @return [Numo::SFloat]
-    def spectral_centroid(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512)
-      Muze::Feature.spectral_centroid(y:, s:, sr:, n_fft:, hop_length:)
+    def spectral_centroid(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_centroid(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def spectral_bandwidth(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, p: 2)
-      Muze::Feature.spectral_bandwidth(y:, s:, sr:, n_fft:, hop_length:, p:)
+    def spectral_bandwidth(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, p: 2, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_bandwidth(y:, s:, sr:, n_fft:, hop_length:, p:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def spectral_rolloff(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, roll_percent: 0.85)
-      Muze::Feature.spectral_rolloff(y:, s:, sr:, n_fft:, hop_length:, roll_percent:)
+    def spectral_rolloff(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, roll_percent: 0.85, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_rolloff(y:, s:, sr:, n_fft:, hop_length:, roll_percent:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def spectral_flatness(y: nil, s: nil, n_fft: 2048, hop_length: 512, amin: 1.0e-10)
-      Muze::Feature.spectral_flatness(y:, s:, n_fft:, hop_length:, amin:)
+    def spectral_flatness(y: nil, s: nil, n_fft: 2048, hop_length: 512, amin: 1.0e-10, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_flatness(y:, s:, n_fft:, hop_length:, amin:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def spectral_contrast(y: nil, s: nil, n_fft: 2048, hop_length: 512, n_bands: 6, quantile: 0.02)
-      Muze::Feature.spectral_contrast(y:, s:, n_fft:, hop_length:, n_bands:, quantile:)
+    def spectral_contrast(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, n_bands: 6, quantile: 0.02, fmin: 200.0, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_contrast(y:, s:, sr:, n_fft:, hop_length:, n_bands:, quantile:, fmin:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def zero_crossing_rate(y, frame_length: 2048, hop_length: 512)
-      Muze::Feature.zero_crossing_rate(y, frame_length:, hop_length:)
+    def spectral_flux(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_flux(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
     end
 
     # @return [Numo::SFloat]
-    def rms(y: nil, s: nil, frame_length: 2048, hop_length: 512)
-      Muze::Feature.rms(y:, s:, frame_length:, hop_length:)
+    def spectral_entropy(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_entropy(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_crest(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_crest(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_slope(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_slope(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def spectral_decrease(y: nil, s: nil, sr: 22_050, n_fft: 2048, hop_length: 512, center: true, pad_mode: :reflect)
+      Muze::Feature.spectral_decrease(y:, s:, sr:, n_fft:, hop_length:, center:, pad_mode:)
+    end
+
+    # @return [Numo::SFloat]
+    def zero_crossing_rate(y, frame_length: 2048, hop_length: 512, threshold: 0.0, center: false)
+      Muze::Feature.zero_crossing_rate(y, frame_length:, hop_length:, threshold:, center:)
+    end
+
+    # @return [Numo::SFloat]
+    def rms(y: nil, s: nil, frame_length: 2048, hop_length: 512, center: false)
+      Muze::Feature.rms(y:, s:, frame_length:, hop_length:, center:)
     end
 
     # @return [Numo::SFloat]
@@ -231,53 +262,68 @@ module Muze
     end
 
     # @return [Numo::SFloat]
-    def chroma_stft(y: nil, sr: 22_050, s: nil, n_chroma: 12, n_fft: 2048, hop_length: 512, norm: 2)
-      Muze::Feature.chroma_stft(y:, sr:, s:, n_chroma:, n_fft:, hop_length:, norm:)
+    def chroma_stft(y: nil, sr: 22_050, s: nil, n_chroma: 12, n_fft: 2048, hop_length: 512, norm: 2, tuning: 0.0)
+      Muze::Feature.chroma_stft(y:, sr:, s:, n_chroma:, n_fft:, hop_length:, norm:, tuning:)
     end
 
     # @return [Numo::SFloat]
-    def onset_strength(y: nil, sr: 22_050, s: nil, hop_length: 512, n_fft: 2048)
-      Muze::Onset.onset_strength(y:, sr:, s:, hop_length:, n_fft:)
+    def onset_strength(y: nil, sr: 22_050, s: nil, hop_length: 512, n_fft: 2048, lag: 1, log: false, max_size: 1, normalize: false)
+      Muze::Onset.onset_strength(y:, sr:, s:, hop_length:, n_fft:, lag:, log:, max_size:, normalize:)
     end
 
     # @return [Array<Integer, Float>]
-    def onset_detect(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, backtrack: false, units: :frames)
-      Muze::Onset.onset_detect(y:, sr:, onset_envelope:, hop_length:, backtrack:, units:)
+    def onset_detect(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, backtrack: false, units: :frames, pre_max: 1, post_max: 1, pre_avg: 1, post_avg: 1, delta: nil, wait: 0, adaptive: false, energy: nil)
+      Muze::Onset.onset_detect(y:, sr:, onset_envelope:, hop_length:, backtrack:, units:, pre_max:, post_max:, pre_avg:, post_avg:, delta:, wait:, adaptive:, energy:)
     end
 
     # @return [Array(Float, Array<Integer>)]
-    def beat_track(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, start_bpm: 120.0, tightness: 100)
-      Muze::Beat.beat_track(y:, sr:, onset_envelope:, hop_length:, start_bpm:, tightness:)
+    def beat_track(y: nil, sr: 22_050, onset_envelope: nil, hop_length: 512, start_bpm: 120.0, tightness: 100, min_bpm: 30.0, max_bpm: 240.0, bpm: nil, fill_missing: true, return_metadata: false)
+      Muze::Beat.beat_track(y:, sr:, onset_envelope:, hop_length:, start_bpm:, tightness:, min_bpm:, max_bpm:, bpm:, fill_missing:, return_metadata:)
+    end
+
+    # @return [Numo::SFloat]
+    def tempo_frequencies(sr: 22_050, hop_length: 512, win_length: 384)
+      Muze::Beat.tempo_frequencies(sr:, hop_length:, win_length:)
     end
 
     # @return [Array(Numo::SFloat, Numo::SFloat)]
-    def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512)
-      Muze::Effects.hpss(y, kernel_size:, power:, margin:, n_fft:, hop_length:)
+    def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512, return_masks: false)
+      Muze::Effects.hpss(y, kernel_size:, power:, margin:, n_fft:, hop_length:, return_masks:)
     end
 
     # @return [Numo::SFloat]
-    def time_stretch(y, rate: 1.0)
-      Muze::Effects.time_stretch(y, rate:)
+    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder)
+      Muze::Effects.time_stretch(y, rate:, n_fft:, hop_length:, method:)
     end
 
     # @return [Numo::SFloat]
-    def pitch_shift(y, sr: 22_050, n_steps: 0)
-      Muze::Effects.pitch_shift(y, sr:, n_steps:)
+    def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto)
+      Muze::Effects.pitch_shift(y, sr:, n_steps:, bins_per_octave:, res_type:)
     end
 
     # @return [Array(Numo::SFloat, Array<Integer>)]
-    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512)
-      Muze::Effects.trim(y, top_db:, frame_length:, hop_length:)
+    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean)
+      Muze::Effects.trim(y, top_db:, frame_length:, hop_length:, ref:, aggregate:)
+    end
+
+    # @return [Numo::SFloat]
+    def preemphasis(y, coef: 0.97)
+      Muze::Effects.preemphasis(y, coef:)
+    end
+
+    # @return [Numo::SFloat]
+    def deemphasis(y, coef: 0.97)
+      Muze::Effects.deemphasis(y, coef:)
     end
 
     # @return [String]
-    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil)
-      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:)
+    def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil)
+      Muze::Display.specshow(data, sr:, hop_length:, x_axis:, y_axis:, output:, width:, height:, cmap:, vmin:, vmax:)
     end
 
     # @return [String]
-    def waveshow(y, sr: 22_050, output: nil)
-      Muze::Display.waveshow(y, sr:, output:)
+    def waveshow(y, sr: 22_050, output: nil, width: 800, height: 240, normalize: true, channels: :overlay)
+      Muze::Display.waveshow(y, sr:, output:, width:, height:, normalize:, channels:)
     end
   end
 end

@@ -66,5 +66,27 @@ RSpec.describe Muze::Beat do
 
       expect(loose_beats).not_to eq(strict_beats)
     end
+
+    it "supports fixed BPM and metadata return" do
+      result = described_class.beat_track(y: metronome, sr:, hop_length:, bpm: 120.0, return_metadata: true)
+
+      expect(result.fetch(:tempo)).to eq(120.0)
+      expect(result.fetch(:confidence)).to be_between(0.0, 1.0)
+    end
+
+    it "returns nil tempo for silent envelopes" do
+      tempo, beats = described_class.beat_track(onset_envelope: Array.new(32, 0.0), sr:, hop_length:)
+
+      expect(tempo).to be_nil
+      expect(beats).to eq([])
+    end
+  end
+
+  describe ".tempo_frequencies" do
+    it "maps tempogram lag to BPM" do
+      frequencies = described_class.tempo_frequencies(sr:, hop_length:, win_length: 4)
+
+      expect(frequencies[1]).to be_within(1.0e-6).of(60.0 * sr / hop_length)
+    end
   end
 end

@@ -10,15 +10,17 @@ module Muze
     # @param y [Numo::SFloat, Array<Float>]
     # @param rate [Float]
     # @return [Numo::SFloat]
-    def time_stretch(y, rate: 1.0)
+    def time_stretch(y, rate: 1.0, n_fft: nil, hop_length: nil, method: :phase_vocoder)
       raise Muze::ParameterError, "rate must be positive" unless rate.positive?
+      raise Muze::ParameterError, "method must be :phase_vocoder, :ola, or :linear" unless %i[phase_vocoder ola linear].include?(method)
 
       signal = y.is_a?(Numo::NArray) ? Numo::SFloat.cast(y) : Numo::SFloat.cast(Array(y))
       return signal if signal.empty? || rate == 1.0
-      return linear_time_stretch(signal.to_a, rate) if signal.size < MIN_PHASE_VOCODER_SAMPLES
+      return linear_time_stretch(signal.to_a, rate) if method == :linear
+      return ola_time_stretch(signal.to_a, rate) if method == :ola || signal.size < MIN_PHASE_VOCODER_SAMPLES
 
-      n_fft = phase_vocoder_fft_size(signal.size)
-      hop_length = [n_fft / 4, 1].max
+      n_fft ||= phase_vocoder_fft_size(signal.size)
+      hop_length ||= [n_fft / 4, 1].max
 
       stft_matrix = Muze::Core::STFT.stft(signal, n_fft:, hop_length:, center: true)
       stretched_stft = phase_vocoder(stft_matrix, rate:, hop_length:, n_fft:)
@@ -31,15 +33,17 @@ module Muze
     # @param sr [Integer]
     # @param n_steps [Float]
     # @return [Numo::SFloat]
-    def pitch_shift(y, sr: 22_050, n_steps: 0)
-      _ = sr
+    def pitch_shift(y, sr: 22_050, n_steps: 0, bins_per_octave: 12, res_type: :auto)
+      raise Muze::ParameterError, "sr must be positive" unless sr.positive?
+      raise Muze::ParameterError, "bins_per_octave must be positive" unless bins_per_octave.positive?
+
       signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
       return signal if n_steps.zero?
 
-      rate = 2.0**(-n_steps.to_f / 12.0)
+      rate = 2.0**(-n_steps.to_f / bins_per_octave)
       stretched = time_stretch(signal, rate:)
-      preferred_res_type = signal.size >= MIN_PHASE_VOCODER_SAMPLES ? :sinc : :linear
-      restored = resample_for_pitch_shift(stretched, target_size: signal.size, preferred_res_type:)
+      effective_res_type = res_type == :auto ? (signal.size >= MIN_PHASE_VOCODER_SAMPLES ? :sinc : :linear) : res_type
+      restored = resample_for_pitch_shift(stretched, target_size: signal.size, res_type: effective_res_type)
       Numo::SFloat.cast(restored[0...signal.size])
     end
 
@@ -48,23 +52,58 @@ module Muze
     # @param frame_length [Integer]
     # @param hop_length [Integer]
     # @return [Array(Numo::SFloat, Array<Integer>)] trimmed signal and [start, end]
-    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512)
-      _ = [frame_length, hop_length]
-      signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
-      abs_signal = signal.abs
-      threshold = [abs_signal.max, 1.0e-12].max * (10.0**(-top_db / 20.0))
-      indices = abs_signal.to_a.each_index.select { |index| abs_signal[index] >= threshold }
-      return [Numo::SFloat[], [0, 0]] if indices.empty?
+    def trim(y, top_db: 60, frame_length: 2048, hop_length: 512, ref: :max, aggregate: :mean)
+      raise Muze::ParameterError, "top_db must be non-negative" if top_db.negative?
+      raise Muze::ParameterError, "frame_length and hop_length must be positive" unless frame_length.positive? && hop_length.positive?
+      raise Muze::ParameterError, "aggregate must be :mean or :max" unless %i[mean max].include?(aggregate)
 
-      start_sample = indices.first
-      end_sample = indices.last + 1
+      signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
+      frames = frame_signal(signal.to_a, frame_length, hop_length)
+      energies = frames.map do |frame|
+        values = frame.map { |value| value * value }
+        aggregate == :max ? Math.sqrt(values.max || 0.0) : Math.sqrt(values.sum(0.0) / frame.length)
+      end
+      reference = trim_reference(energies, ref:)
+      threshold = [reference, 1.0e-12].max * (10.0**(-top_db / 20.0))
+      active_frames = energies.each_index.select { |index| energies[index] >= threshold }
+      return [Numo::SFloat[], [0, 0]] if active_frames.empty?
+
+      search_start = active_frames.first * hop_length
+      search_end = [(active_frames.last * hop_length) + frame_length, signal.size].min
+      abs_signal = signal.abs
+      active_samples = (search_start...search_end).select { |index| abs_signal[index] >= threshold }
+      return [Numo::SFloat[], [0, 0]] if active_samples.empty?
+
+      start_sample = active_samples.first
+      end_sample = active_samples.last + 1
       [signal[start_sample...end_sample], [start_sample, end_sample]]
+    end
+
+    def preemphasis(y, coef: 0.97)
+      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      return Numo::SFloat.cast(signal) if signal.empty?
+
+      output = Array.new(signal.length, 0.0)
+      output[0] = signal[0]
+      (1...signal.length).each { |index| output[index] = signal[index] - (coef * signal[index - 1]) }
+      Numo::SFloat.cast(output)
+    end
+
+    def deemphasis(y, coef: 0.97)
+      signal = y.is_a?(Numo::NArray) ? y.to_a : Array(y)
+      return Numo::SFloat.cast(signal) if signal.empty?
+
+      output = Array.new(signal.length, 0.0)
+      output[0] = signal[0]
+      (1...signal.length).each { |index| output[index] = signal[index] + (coef * output[index - 1]) }
+      Numo::SFloat.cast(output)
     end
 
     # @param signal_length [Integer]
     # @return [Integer]
     def phase_vocoder_fft_size(signal_length)
-      max_fft = [signal_length, 2048].min
+      max_allowed = signal_length < MIN_PHASE_VOCODER_SAMPLES ? 512 : 2048
+      max_fft = [signal_length, max_allowed].min
       fft_size = 1
       fft_size *= 2 while (fft_size * 2) <= max_fft
       [fft_size, 32].max
@@ -152,20 +191,79 @@ module Muze
     end
     private_class_method :linear_time_stretch
 
+    def ola_time_stretch(signal, rate)
+      frame_length = [[next_power_of_two([signal.length / 8, 256].max), 2048].min, 32].max
+      analysis_hop = [frame_length / 2, 1].max
+      synthesis_hop = [(analysis_hop / rate).round, 1].max
+      frame_count = signal.length <= frame_length ? 1 : (((signal.length - frame_length).to_f / analysis_hop).ceil + 1)
+      target_length = [(signal.length / rate).round, 1].max
+      output = Array.new(target_length + frame_length, 0.0)
+      window_sums = Array.new(output.length, 0.0)
+      window = Muze::Core::Windows.hann(frame_length).to_a
+
+      frame_count.times do |frame_index|
+        source_start = frame_index * analysis_hop
+        target_start = frame_index * synthesis_hop
+        frame_length.times do |offset|
+          source_index = source_start + offset
+          target_index = target_start + offset
+          break if target_index >= output.length
+
+          value = source_index < signal.length ? signal[source_index] : 0.0
+          weight = window[offset]
+          output[target_index] += value * weight
+          window_sums[target_index] += weight * weight
+        end
+      end
+
+      output.map!.with_index do |value, index|
+        denominator = window_sums[index]
+        denominator > 1.0e-12 ? value / denominator : value
+      end
+      Numo::SFloat.cast(output[0, target_length])
+    end
+    private_class_method :ola_time_stretch
+
+    def next_power_of_two(value)
+      power = 1
+      power *= 2 while power < value
+      power
+    end
+    private_class_method :next_power_of_two
+
     # Prefer sinc-quality resampling, then fall back to linear on failure.
     # @param stretched [Numo::SFloat]
     # @param target_size [Integer]
     # @param preferred_res_type [Symbol]
     # @return [Numo::SFloat]
-    def resample_for_pitch_shift(stretched, target_size:, preferred_res_type:)
-      if preferred_res_type == :sinc
-        return Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :sinc)
-      end
-
-      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :linear)
-    rescue Muze::Error, StandardError
-      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :linear)
+    def resample_for_pitch_shift(stretched, target_size:, res_type:)
+      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type:, target_length: target_size)
+    rescue Muze::ParameterError
+      Muze::Core::Resample.resample(stretched, orig_sr: stretched.size, target_sr: target_size, res_type: :linear, target_length: target_size)
     end
     private_class_method :resample_for_pitch_shift
+
+    def frame_signal(signal, frame_length, hop_length)
+      return [signal + Array.new(frame_length - signal.length, 0.0)] if signal.length <= frame_length
+
+      frame_count = ((signal.length - frame_length).to_f / hop_length).ceil + 1
+      Array.new(frame_count) do |index|
+        start = index * hop_length
+        frame = signal[start, frame_length] || []
+        frame.length < frame_length ? frame + Array.new(frame_length - frame.length, 0.0) : frame
+      end
+    end
+    private_class_method :frame_signal
+
+    def trim_reference(energies, ref:)
+      case ref
+      when :max then energies.max || 0.0
+      when Numeric then ref.to_f
+      when Proc then ref.call(energies)
+      else
+        raise Muze::ParameterError, "ref must be :max, numeric, or a Proc"
+      end
+    end
+    private_class_method :trim_reference
   end
 end

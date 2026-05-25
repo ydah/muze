@@ -23,5 +23,14 @@ RSpec.describe Muze::Feature do
 
       expect(dominant).to eq(9)
     end
+
+    it "passes tuning and rejects unsupported normalization" do
+      tuned = described_class.chroma_stft(y: signal, sr:, n_chroma: 12, n_fft: 2048, hop_length: 256, tuning: 0.25)
+
+      expect(tuned.shape[0]).to eq(12)
+      expect do
+        described_class.chroma_stft(y: signal, sr:, norm: :bad)
+      end.to raise_error(Muze::ParameterError, /norm/)
+    end
   end
 end

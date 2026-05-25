@@ -39,6 +39,12 @@ RSpec.describe Muze::Effects do
       expect((phase_vocoder_peak - 440.0).abs).to be < (baseline_peak - 440.0).abs
       expect(phase_vocoder_peak).to be_within(12.0).of(440.0)
     end
+
+    it "allows explicit linear method" do
+      stretched = described_class.time_stretch(signal, rate: 2.0, method: :linear)
+
+      expect(stretched.size).to be_within(1).of(signal.size / 2)
+    end
   end
 
   describe ".pitch_shift" do
@@ -61,6 +67,12 @@ RSpec.describe Muze::Effects do
       expect(shifted.size).to eq(signal.size)
       expect(shifted.to_a.all?(&:finite?)).to be(true)
     end
+
+    it "supports custom bins per octave" do
+      shifted = described_class.pitch_shift(signal, sr:, n_steps: 1, bins_per_octave: 24)
+
+      expect(shifted.size).to eq(signal.size)
+    end
   end
 
   describe ".trim" do
@@ -73,6 +85,15 @@ RSpec.describe Muze::Effects do
       expect(trimmed.size).to be <= padded.size
       expect(start_idx).to be > 0
       expect(end_idx).to be > start_idx
+    end
+  end
+
+  describe "preemphasis/deemphasis" do
+    it "round-trips a signal closely" do
+      emphasized = described_class.preemphasis(signal)
+      restored = described_class.deemphasis(emphasized)
+
+      expect((restored - signal).abs.max).to be < 1.0e-4
     end
   end
 

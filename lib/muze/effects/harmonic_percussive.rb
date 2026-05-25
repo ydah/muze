@@ -11,7 +11,9 @@ module Muze
     # @param n_fft [Integer]
     # @param hop_length [Integer]
     # @return [Array(Numo::SFloat, Numo::SFloat)] harmonic and percussive waveforms
-    def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512)
+    def hpss(y, kernel_size: 31, power: 2.0, margin: 1.0, n_fft: 2048, hop_length: 512, return_masks: false)
+      validate_hpss_params!(kernel_size:, power:, margin:)
+
       stft_matrix = Muze.stft(y, n_fft:, hop_length:)
       magnitude, = Muze.magphase(stft_matrix)
 
@@ -20,9 +22,12 @@ module Muze
 
       harmonic_weight = harmonic_median**power
       percussive_weight = percussive_median**power
+      harmonic_margin, percussive_margin = Array(margin)
+      harmonic_margin ||= margin
+      percussive_margin ||= harmonic_margin
 
-      harmonic_mask = harmonic_weight / (harmonic_weight + (margin * percussive_weight) + 1.0e-12)
-      percussive_mask = percussive_weight / (percussive_weight + (margin * harmonic_weight) + 1.0e-12)
+      harmonic_mask = soft_mask(harmonic_weight, harmonic_weight + (harmonic_margin * percussive_weight), power: 1.0)
+      percussive_mask = soft_mask(percussive_weight, percussive_weight + (percussive_margin * harmonic_weight), power: 1.0)
 
       harmonic_stft = stft_matrix * harmonic_mask
       percussive_stft = stft_matrix * percussive_mask
@@ -30,8 +35,29 @@ module Muze
       signal = y.is_a?(Numo::NArray) ? y : Numo::SFloat.cast(y)
       harmonic = Muze.istft(harmonic_stft, hop_length:, length: signal.size)
       percussive = Muze.istft(percussive_stft, hop_length:, length: signal.size)
+      return [harmonic, percussive, harmonic_mask, percussive_mask] if return_masks
+
       [harmonic, percussive]
     end
+
+    def validate_hpss_params!(kernel_size:, power:, margin:)
+      raise Muze::ParameterError, "kernel_size must be a positive odd integer" unless kernel_size.is_a?(Integer) && kernel_size.positive? && kernel_size.odd?
+      raise Muze::ParameterError, "power must be positive" unless power.positive?
+
+      margins = Array(margin)
+      raise Muze::ParameterError, "margin must be positive or [harmonic_margin, percussive_margin]" unless [1, 2].include?(margins.length)
+      return if margins.all? { |value| value.respond_to?(:positive?) && value.positive? }
+
+      raise Muze::ParameterError, "margin must be positive"
+    end
+    private_class_method :validate_hpss_params!
+
+    def soft_mask(numerator, denominator, power:)
+      powered_numerator = numerator**power
+      powered_denominator = denominator**power
+      powered_numerator / (powered_denominator + 1.0e-12)
+    end
+    private_class_method :soft_mask
 
     def median_filter(matrix, kernel_size, axis:)
       half = kernel_size / 2

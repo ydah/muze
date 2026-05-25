@@ -4,6 +4,7 @@ module Muze
   # Filterbank generation utilities.
   module Filters
     module_function
+    MEL_CACHE = {}
 
     # @param sr [Integer]
     # @param n_fft [Integer]
@@ -11,13 +12,39 @@ module Muze
     # @param fmin [Float]
     # @param fmax [Float, nil]
     # @param htk [Boolean]
+    # @param norm [Symbol, nil]
     # @return [Numo::SFloat] shape: [n_mels, 1 + n_fft/2]
-    def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false)
+    def mel(sr: 22_050, n_fft: 2048, n_mels: 128, fmin: 0.0, fmax: nil, htk: false, norm: nil)
+      key = [sr, n_fft, n_mels, fmin, fmax, htk, norm]
+      (MEL_CACHE[key] ||= build_mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:, norm:)).dup
+    end
+
+    # @param n_mels [Integer]
+    # @param fmin [Float]
+    # @param fmax [Float]
+    # @param htk [Boolean]
+    # @return [Numo::SFloat]
+    def mel_frequencies(n_mels:, fmin:, fmax:, htk: false)
+      validate_frequency_bounds!(sr: fmax * 2.0, fmin:, fmax:)
+      raise Muze::ParameterError, "n_mels must be positive" unless n_mels.positive?
+
+      mel_min = hz_to_mel(fmin, htk:)
+      mel_max = hz_to_mel(fmax, htk:)
+      Numo::SFloat.cast(
+        Array.new(n_mels) do |idx|
+          mel_to_hz(mel_min + ((mel_max - mel_min) * idx / [n_mels - 1, 1].max.to_f), htk:)
+        end
+      )
+    end
+
+    def build_mel(sr:, n_fft:, n_mels:, fmin:, fmax:, htk:, norm:)
       raise Muze::ParameterError, "sr must be positive" unless sr.positive?
       raise Muze::ParameterError, "n_fft must be positive" unless n_fft.positive?
       raise Muze::ParameterError, "n_mels must be positive" unless n_mels.positive?
+      raise Muze::ParameterError, "norm must be nil or :slaney" unless norm.nil? || norm == :slaney
 
       fmax ||= sr / 2.0
+      validate_frequency_bounds!(sr:, fmin:, fmax:)
       mel_min = hz_to_mel(fmin, htk:)
       mel_max = hz_to_mel(fmax, htk:)
 
@@ -47,10 +74,29 @@ module Muze
 
           matrix[mel_index, bin] = (right - bin).to_f / (right - center)
         end
+
+        if norm == :slaney
+          enorm = 2.0 / (hz_points[mel_index + 2] - hz_points[mel_index])
+          matrix[mel_index, true] = matrix[mel_index, true] * enorm
+        end
+      end
+
+      empty_filters = n_mels.times.select { |mel_index| matrix[mel_index, true].sum <= 0.0 }
+      unless empty_filters.empty?
+        raise Muze::ParameterError, "mel filterbank contains empty filters: #{empty_filters.join(', ')}"
       end
 
       matrix
     end
+    private_class_method :build_mel
+
+    def validate_frequency_bounds!(sr:, fmin:, fmax:)
+      raise Muze::ParameterError, "fmin must be >= 0" if fmin.negative?
+      raise Muze::ParameterError, "fmax must be positive" unless fmax.positive?
+      raise Muze::ParameterError, "fmin must be less than fmax" unless fmin < fmax
+      raise Muze::ParameterError, "fmax must be <= sr / 2" unless fmax <= (sr / 2.0)
+    end
+    private_class_method :validate_frequency_bounds!
 
     # @param hz [Float]
     # @param htk [Boolean]

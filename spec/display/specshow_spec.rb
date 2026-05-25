@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "tmpdir"
+require "pathname"
 
 RSpec.describe Muze::Display do
   describe ".specshow" do
@@ -15,11 +16,20 @@ RSpec.describe Muze::Display do
     it "writes output file" do
       data = Numo::SFloat.new(8, 8).rand
       Dir.mktmpdir do |dir|
-        path = File.join(dir, "spectrogram.svg")
+        path = Pathname(File.join(dir, "spectrogram.svg"))
         described_class.specshow(data, output: path)
 
         expect(File.exist?(path)).to be(true)
       end
+    end
+
+    it "records axis metadata and supports alternate cmap" do
+      data = Numo::SFloat.new(8, 8).rand
+      svg = described_class.specshow(data, sr: 44_100, hop_length: 256, x_axis: :frames, y_axis: :mel, cmap: :gray, width: 320, height: 180)
+
+      expect(svg).to include("data-x-axis='frames'")
+      expect(svg).to include("data-y-axis='mel'")
+      expect(svg).to include("width='320'")
     end
   end
 
@@ -33,6 +43,14 @@ RSpec.describe Muze::Display do
         expect(svg).to include("<svg")
         expect(File.exist?(path)).to be(true)
       end
+    end
+
+    it "uses envelope paths and split channels" do
+      stereo = Array.new(1024) { |idx| [Math.sin(idx / 10.0), Math.cos(idx / 10.0)] }
+      svg = described_class.waveshow(stereo, channels: :split)
+
+      expect(svg).to include("<path")
+      expect(svg).to include("data-channels='split'")
     end
   end
 end

@@ -51,5 +51,15 @@ RSpec.describe Muze::Effects do
       harmonic, percussive = described_class.hpss(signal, kernel_size: 9, n_fft: 1024, hop_length: 256)
       expect(percussive.abs.mean).to be > harmonic.abs.mean
     end
+
+    it "can return masks and validates parameters" do
+      signal = mixed_signal
+      result = described_class.hpss(signal, kernel_size: 9, margin: [1.0, 2.0], n_fft: 1024, hop_length: 256, return_masks: true)
+
+      expect(result.length).to eq(4)
+      expect do
+        described_class.hpss(signal, kernel_size: 10)
+      end.to raise_error(Muze::ParameterError, /kernel_size/)
+    end
   end
 end
