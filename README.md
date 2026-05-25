@@ -1,5 +1,10 @@
 # Muze
 
+[![Gem Version](https://img.shields.io/gem/v/muze.svg)](https://rubygems.org/gems/muze)
+[![CI](https://github.com/ydah/muze/actions/workflows/ci.yml/badge.svg)](https://github.com/ydah/muze/actions/workflows/ci.yml)
+[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.1-red.svg)](https://www.ruby-lang.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)
+
 Muze is a Ruby audio feature extraction library that provides a full pipeline from audio loading to spectral analysis, feature extraction, rhythm analysis, effects, and lightweight visualization.
 
 ![Image](https://github.com/user-attachments/assets/1e88395b-c715-4c9a-b458-d1cb9fceb848)
