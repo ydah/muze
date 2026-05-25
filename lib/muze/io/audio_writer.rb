@@ -13,6 +13,8 @@ module Muze
 
       def write(path, y, sr:, normalize: false, format: :wav)
         raise Muze::ParameterError, "sr must be positive" unless sr.is_a?(Integer) && sr.positive?
+        raise Muze::ParameterError, "normalize must be true or false" unless [true, false].include?(normalize)
+
         format_label = format.to_s.downcase.to_sym
         raise Muze::UnsupportedFormatError, "only WAV output is supported" unless %i[wav wave].include?(format_label)
 

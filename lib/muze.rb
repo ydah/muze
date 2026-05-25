@@ -61,8 +61,8 @@ module Muze
     # @param pad_mode [Symbol]
     # @param pad_end [Boolean]
     # @return [Numo::DComplex]
-    def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false)
-      Muze::Core::STFT.stft(y, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end:)
+    def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false, periodic: false)
+      Muze::Core::STFT.stft(y, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end:, periodic:)
     end
 
     # @param stft_matrix [Numo::DComplex]
@@ -72,8 +72,8 @@ module Muze
     # @param center [Boolean]
     # @param length [Integer, nil]
     # @return [Numo::SFloat]
-    def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat)
-      Muze::Core::STFT.istft(stft_matrix, hop_length:, win_length:, window:, center:, length:, dtype:)
+    def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat, periodic: false)
+      Muze::Core::STFT.istft(stft_matrix, hop_length:, win_length:, window:, center:, length:, dtype:, periodic:)
     end
 
     # @param stft_matrix [Numo::DComplex]
@@ -83,8 +83,8 @@ module Muze
     end
 
     # @return [Array<Numo::DComplex>]
-    def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect)
-      Muze::Core::STFT.stft_stream(chunks, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:)
+    def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false)
+      Muze::Core::STFT.stft_stream(chunks, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, periodic:)
     end
 
     # @param s [Numo::NArray]

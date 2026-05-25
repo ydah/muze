@@ -25,6 +25,12 @@ RSpec.describe Muze::Feature do
       expect(mel.shape[0]).to eq(40)
       expect(mel.shape[1]).to eq(magnitude.shape[1])
     end
+
+    it "rejects negative precomputed spectrogram input" do
+      expect do
+        described_class.melspectrogram(sr:, s: Numo::SFloat[[-1.0]], n_fft: 512, n_mels: 8)
+      end.to raise_error(Muze::ParameterError, /non-negative/)
+    end
   end
 
   describe ".mfcc" do
@@ -55,6 +61,12 @@ RSpec.describe Muze::Feature do
 
       expect(coeffs.shape[0]).to eq(13)
       expect(coeffs.shape[1]).to eq(log_mel.shape[1])
+    end
+
+    it "rejects negative mel-power input" do
+      expect do
+        described_class.mfcc(sr:, s: Numo::SFloat[[-1.0]], s_kind: :mel_power)
+      end.to raise_error(Muze::ParameterError, /non-negative/)
     end
   end
 

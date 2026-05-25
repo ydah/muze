@@ -25,6 +25,9 @@ module Muze
 
       spectrum = if s
                    provided = Numo::SFloat.cast(s)
+                   validate_finite_array!(provided.to_a.flatten, "s")
+                   raise Muze::ParameterError, "spectrogram input must be non-negative" if provided.to_a.flatten.any?(&:negative?)
+
                    s_kind == :magnitude ? (provided**power).cast_to(Numo::SFloat) : provided
                  else
                    spectrogram(y, n_fft:, hop_length:, power:, center:, window:, pad_mode:)
@@ -52,7 +55,13 @@ module Muze
       raise Muze::ParameterError, "s_kind must be :mel_power or :log_mel" unless %i[mel_power log_mel].include?(s_kind)
 
       mel_spec = if s
-                   Numo::SFloat.cast(s)
+                   provided = Numo::SFloat.cast(s)
+                   validate_finite_array!(provided.to_a.flatten, "s")
+                   if s_kind == :mel_power && provided.to_a.flatten.any?(&:negative?)
+                     raise Muze::ParameterError, "mel power spectrogram must be non-negative"
+                   end
+
+                   provided
                  else
                    melspectrogram(y:, sr:, n_fft:, hop_length:, n_mels:, fmin:, fmax:)
                  end

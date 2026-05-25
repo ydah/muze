@@ -49,6 +49,13 @@ RSpec.describe Muze::Core::STFT do
 
       expect(padded.shape[1]).to eq(dropped.shape[1] + 1)
     end
+
+    it "supports periodic analysis windows" do
+      symmetric = Muze.stft(signal, n_fft: 256, hop_length: 64, center: false, periodic: false)
+      periodic = Muze.stft(signal, n_fft: 256, hop_length: 64, center: false, periodic: true)
+
+      expect((symmetric.abs - periodic.abs).abs.max).to be > 0.0
+    end
   end
 
   describe ".istft" do
@@ -65,6 +72,13 @@ RSpec.describe Muze::Core::STFT do
       reconstructed = Muze.istft(spectrum, hop_length: 64, center: true, length: signal.size, dtype: :dfloat)
 
       expect(reconstructed).to be_a(Numo::DFloat)
+    end
+
+    it "uses matching periodic windows for reconstruction" do
+      spectrum = Muze.stft(signal, n_fft: 256, hop_length: 64, center: true, periodic: true)
+      reconstructed = Muze.istft(spectrum, hop_length: 64, center: true, length: signal.size, periodic: true)
+
+      expect((reconstructed - signal).abs.max).to be < 0.05
     end
   end
 

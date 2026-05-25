@@ -18,7 +18,7 @@ module Muze
       # @param pad_mode [Symbol]
       # @param pad_end [Boolean]
       # @return [Numo::DComplex] shape: [1 + n_fft/2, frames]
-      def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false)
+      def stft(y, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: true, pad_mode: :reflect, pad_end: false, periodic: false)
         win_length ||= n_fft
         validate_stft_params!(n_fft:, hop_length:, win_length:)
         validate_pad_mode!(pad_mode)
@@ -28,7 +28,7 @@ module Muze
         signal = signal.empty? ? [0.0] : signal
 
         frames = Muze::Core::Frames.slice(signal, frame_length: n_fft, hop_length:, pad_end:)
-        window_values = Muze::Core::Windows.resolve(window, win_length).to_a
+        window_values = Muze::Core::Windows.resolve(window, win_length, periodic:).to_a
         window_offset = (n_fft - win_length) / 2
 
         frequency_bins = (n_fft / 2) + 1
@@ -55,7 +55,7 @@ module Muze
       # @param center [Boolean]
       # @param length [Integer, nil]
       # @return [Numo::SFloat]
-      def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat)
+      def istft(stft_matrix, hop_length: 512, win_length: nil, window: :hann, center: true, length: nil, dtype: Numo::SFloat, periodic: false)
         frequency_bins, frame_count = stft_matrix.shape
         n_fft = (frequency_bins - 1) * 2
         win_length ||= n_fft
@@ -64,7 +64,7 @@ module Muze
         signal_length = n_fft + (hop_length * [frame_count - 1, 0].max)
         output = Array.new(signal_length, 0.0)
         window_sums = Array.new(signal_length, 0.0)
-        window_values = Muze::Core::Windows.resolve(window, win_length).to_a
+        window_values = Muze::Core::Windows.resolve(window, win_length, periodic:).to_a
         window_offset = (n_fft - win_length) / 2
 
         frame_count.times do |frame_index|
@@ -110,9 +110,9 @@ module Muze
 
       # @param chunks [Enumerable<Array<Float>, Numo::NArray>]
       # @return [Array<Numo::DComplex>]
-      def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect)
+      def stft_stream(chunks, n_fft: 2048, hop_length: 512, win_length: nil, window: :hann, center: false, pad_mode: :reflect, periodic: false)
         chunks.map do |chunk|
-          stft(chunk, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end: true)
+          stft(chunk, n_fft:, hop_length:, win_length:, window:, center:, pad_mode:, pad_end: true, periodic:)
         end
       end
 

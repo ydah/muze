@@ -14,9 +14,12 @@ module Muze
     def specshow(data, sr: 22_050, hop_length: 512, x_axis: :time, y_axis: :linear, output: nil, width: 800, height: 400, cmap: :heat, vmin: nil, vmax: nil, fragment: false)
       validate_axis!(x_axis:, y_axis:)
       raise Muze::ParameterError, "width and height must be positive" unless width.positive? && height.positive?
+      raise Muze::ParameterError, "sr and hop_length must be positive" unless sr.positive? && hop_length.positive?
 
       matrix = Numo::SFloat.cast(data)
       matrix = matrix.expand_dims(1) if matrix.ndim == 1
+      validate_matrix!(matrix)
+      validate_color_bounds!(vmin:, vmax:)
       matrix = downsample_matrix(matrix, max_cells: 12_000)
       rows, cols = matrix.shape
 
@@ -134,6 +137,25 @@ module Muze
       raise Muze::ParameterError, "unsupported y_axis" unless %i[linear log mel hz].include?(y_axis)
     end
     private_class_method :validate_axis!
+
+    def validate_matrix!(matrix)
+      return if matrix.to_a.flatten.all? { |value| value.respond_to?(:finite?) && value.finite? }
+
+      raise Muze::ParameterError, "data must contain only finite numeric values"
+    end
+    private_class_method :validate_matrix!
+
+    def validate_color_bounds!(vmin:, vmax:)
+      [[:vmin, vmin], [:vmax, vmax]].each do |name, value|
+        next if value.nil? || (value.respond_to?(:finite?) && value.finite?)
+
+        raise Muze::ParameterError, "#{name} must be finite"
+      end
+      return unless vmin && vmax && vmin > vmax
+
+      raise Muze::ParameterError, "vmin must be <= vmax"
+    end
+    private_class_method :validate_color_bounds!
 
     def color_for(value, cmap:)
       case cmap

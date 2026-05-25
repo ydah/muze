@@ -39,6 +39,12 @@ RSpec.describe Muze::Feature do
       expect(chroma.shape[0]).to eq(12)
       expect(chroma.to_a.flatten.all?(&:finite?)).to be(true)
     end
+
+    it "rejects invalid precomputed spectrogram input" do
+      expect do
+        described_class.chroma_stft(sr:, s: Numo::SFloat[[-1.0]], n_fft: 2048)
+      end.to raise_error(Muze::ParameterError, /non-negative/)
+    end
   end
 
   describe ".tonnetz" do

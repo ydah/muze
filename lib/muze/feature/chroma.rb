@@ -15,7 +15,9 @@ module Muze
     # @return [Numo::SFloat] shape: [n_chroma, frames]
     def chroma_stft(y: nil, sr: 22_050, s: nil, n_chroma: 12, n_fft: 2048, hop_length: 512, norm: 2, tuning: 0.0, ctroct: nil, octwidth: nil)
       spectrum = if s
-                   Numo::SFloat.cast(s)
+                   provided = Numo::SFloat.cast(s)
+                   validate_spectrum!(provided)
+                   provided
                  else
                    stft_matrix = Muze.stft(y, n_fft:, hop_length:)
                    magnitude, = Muze.magphase(stft_matrix)
@@ -78,5 +80,16 @@ module Muze
       chroma
     end
     private_class_method :normalize
+
+    def validate_spectrum!(spectrum)
+      values = spectrum.to_a.flatten
+      unless values.all? { |value| value.respond_to?(:finite?) && value.finite? }
+        raise Muze::ParameterError, "s must contain only finite numeric values"
+      end
+      return unless values.any?(&:negative?)
+
+      raise Muze::ParameterError, "spectrogram input must be non-negative"
+    end
+    private_class_method :validate_spectrum!
   end
 end

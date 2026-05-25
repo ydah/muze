@@ -43,40 +43,63 @@ module Muze
         # @param duration [Float, nil]
         # @return [Array(Array<Float>, Integer, Integer)]
         def read(path, offset: 0.0, duration: nil)
-          buffer = Wavify::Codecs::Wav.read(path)
-          float_format = buffer.format.with(sample_format: :float, bit_depth: 32)
-          converted = buffer.convert(float_format)
+          metadata = Wavify::Codecs::Wav.metadata(path)
+          source_format = metadata.fetch(:format)
+          float_format = source_format.with(sample_format: :float, bit_depth: 32)
+          samples = stream_samples(path, float_format:, offset:, duration:)
 
-          samples = samples_from_buffer(converted, offset:, duration:)
-          [samples, converted.format.sample_rate, converted.format.channels]
+          [samples_from_interleaved(samples, float_format.channels), float_format.sample_rate, float_format.channels]
         end
 
         # @param path [String]
         # @return [Hash]
         def info(path)
-          buffer = Wavify::Codecs::Wav.read(path)
+          metadata = Wavify::Codecs::Wav.metadata(path)
+          format = metadata.fetch(:format)
           {
-            sample_rate: buffer.format.sample_rate,
-            channels: buffer.format.channels,
-            duration: buffer.duration.total_seconds,
+            sample_rate: format.sample_rate,
+            channels: format.channels,
+            duration: metadata.fetch(:duration).total_seconds,
             format: format_label(path)
           }
         end
 
-        # @param buffer [Wavify::Core::SampleBuffer]
+        # @return [Array<Float>]
+        def stream_samples(path, float_format:, offset:, duration:)
+          start_frame = (offset * float_format.sample_rate).floor
+          end_frame = duration ? start_frame + (duration * float_format.sample_rate).floor : nil
+          samples = []
+          current_frame = 0
+
+          Wavify::Codecs::Wav.stream_read(path) do |chunk|
+            converted = chunk.format == float_format ? chunk : chunk.convert(float_format)
+            chunk_frames = converted.sample_frame_count
+            chunk_start = current_frame
+            chunk_end = current_frame + chunk_frames
+            copy_start = [start_frame, chunk_start].max
+            copy_end = end_frame ? [end_frame, chunk_end].min : chunk_end
+
+            if copy_start < copy_end
+              local_start = copy_start - chunk_start
+              local_length = copy_end - copy_start
+              samples.concat(converted.slice(local_start, local_length).samples)
+            end
+
+            current_frame = chunk_end
+            break if end_frame && current_frame >= end_frame
+          end
+
+          samples
+        end
+        private_class_method :stream_samples
+
         # @return [Array<Float>, Array<Array<Float>>]
-        def samples_from_buffer(buffer, offset:, duration:)
-          channels = buffer.format.channels
-          start_frame = (offset * buffer.format.sample_rate).floor
-          frame_count = duration ? (duration * buffer.format.sample_rate).floor : buffer.sample_frame_count - start_frame
-          start_sample = start_frame * channels
-          sample_count = [frame_count, 0].max * channels
-          samples = buffer.samples[start_sample, sample_count] || []
+        def samples_from_interleaved(samples, channels)
           return samples if channels == 1
 
           samples.each_slice(channels).map(&:dup)
         end
-        private_class_method :samples_from_buffer
+        private_class_method :samples_from_interleaved
 
         def format_label(source)
           return File.extname(source).delete_prefix(".") if source.is_a?(String)

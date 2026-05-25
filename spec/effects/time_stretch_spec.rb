@@ -110,6 +110,20 @@ RSpec.describe Muze::Effects do
       expect(shifted.abs.max).to be <= 0.5
     end
 
+    it "uses the provided sample rate for the restoration resample" do
+      allow(Muze::Core::Resample).to receive(:resample).and_call_original
+
+      described_class.pitch_shift(signal, sr: 16_000, n_steps: 12, res_type: :linear)
+
+      expect(Muze::Core::Resample).to have_received(:resample).with(
+        anything,
+        orig_sr: 16_000,
+        target_sr: 8_000,
+        res_type: :linear,
+        target_length: signal.size
+      )
+    end
+
     it "processes multi-channel input" do
       stereo = Numo::SFloat.zeros(signal.size, 2)
       stereo[true, 0] = signal

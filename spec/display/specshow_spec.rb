@@ -39,6 +39,16 @@ RSpec.describe Muze::Display do
       expect(fragment).to start_with("<g ")
       expect(fragment).not_to include("<svg")
     end
+
+    it "rejects invalid display parameters" do
+      expect do
+        described_class.specshow(Numo::SFloat[[1.0]], sr: 0)
+      end.to raise_error(Muze::ParameterError, /sr/)
+
+      expect do
+        described_class.specshow(Numo::SFloat[[1.0]], vmin: 2.0, vmax: 1.0)
+      end.to raise_error(Muze::ParameterError, /vmin/)
+    end
   end
 
   describe ".waveshow" do

@@ -85,6 +85,14 @@ RSpec.describe Muze::IO::AudioLoader do
       expect(y.size).to eq(44_100)
     end
 
+    it "applies offset and duration to WAV StringIO input" do
+      io = StringIO.new(File.binread(mono_path))
+      y, sr = Muze.load(io, sr: 44_100, format: :wav, offset: 0.5, duration: 0.25)
+
+      expect(sr).to eq(44_100)
+      expect(y.size).to be_within(1).of(11_025)
+    end
+
     it "rejects files larger than max_bytes" do
       expect do
         Muze.load(mono_path, max_bytes: 1)
@@ -215,6 +223,12 @@ RSpec.describe Muze::IO::AudioWriter do
       expect do
         Muze.write("out.flac", [0.0], sr: 8_000, format: :flac)
       end.to raise_error(Muze::UnsupportedFormatError, /WAV/)
+    end
+
+    it "rejects non-boolean normalization" do
+      expect do
+        Muze.write("out.wav", [0.0], sr: 8_000, normalize: :yes)
+      end.to raise_error(Muze::ParameterError, /normalize/)
     end
   end
 end
